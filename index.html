@@ -1,0 +1,2002 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ระบบติดตามและแสดงผลกราฟคุณภาพน้ำ 10 จุด (เชื่อมต่อ Google Drive)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #f3f7fa;
+      --card: #ffffff;
+      --ink: #162433;
+      --muted: #5b6e82;
+      --primary: #0b6fa4;
+      --primary-dark: #074e74;
+      --border: #dce6ef;
+      --ok-bg: #e6f6ec;
+      --ok-ink: #166534;
+      --low-bg: #fff6e5;
+      --low-ink: #9a5b00;
+      --high-bg: #fdecec;
+      --high-ink: #b91c1c;
+      --c-ph: #16a34a;     /* เขียว */
+      --c-ec: #f97316;     /* ส้ม */
+      --c-sal: #8b4513;    /* น้ำตาล */
+      --c-do: #2563eb;     /* น้ำเงิน */
+      --c-tds: #ec4899;    /* ชมพู */
+      --c-temp: #0ea5e9;   /* ฟ้า */
+      --radius: 14px;
+      --shadow: 0 6px 20px rgba(15, 35, 58, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Sarabun", "Noto Sans Thai", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.55;
+    }
+
+    header {
+      background: linear-gradient(135deg, #074e74 0%, #0b6fa4 60%, #148ec4 100%);
+      color: #fff;
+      padding: 20px 18px;
+      box-shadow: 0 4px 16px rgba(7, 78, 116, 0.22);
+    }
+    .header-inner {
+      max-width: 1360px;
+      margin: 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: clamp(1.25rem, 2.5vw, 1.8rem);
+      font-weight: 700;
+    }
+    header p {
+      margin: 4px 0 0;
+      font-size: 0.92rem;
+      opacity: 0.92;
+    }
+
+    .container {
+      max-width: 1360px;
+      margin: 18px auto 48px;
+      padding: 0 14px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .tool-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button, .btn {
+      border: 1px solid transparent;
+      border-radius: 10px;
+      padding: 9px 14px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-outline {
+      background: #fff;
+      color: var(--ink);
+      border-color: var(--border);
+    }
+    .btn-outline:hover { background: #f0f6fb; }
+    .btn-success { background: #15803d; color: #fff; }
+    .btn-success:hover { background: #166534; }
+    .btn-gdrive { background: #1a73e8; color: #fff; }
+    .btn-gdrive:hover { background: #1557b0; }
+    .btn-danger { background: #dc2626; color: #fff; padding: 5px 10px; font-size: 0.82rem; }
+    .btn-sm { padding: 5px 10px; font-size: 0.82rem; }
+
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+    }
+    .tab-btn {
+      background: #eef4f9;
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-weight: 600;
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .filters {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+      background: #f8fbfd;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid #e6eff6;
+    }
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 0.86rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    select, input[type="date"], input[type="time"], input[type="number"], input[type="text"], input[type="url"] {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #c9d8e6;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.92rem;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    .legend-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .legend-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 11px;
+      border-radius: 999px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .param-toggle-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin: 10px 0 14px;
+      padding: 10px 12px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .param-toggle {
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      border-radius: 999px;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .param-toggle.inactive {
+      opacity: 0.42;
+      filter: grayscale(70%);
+      text-decoration: line-through;
+    }
+
+    .chart-box {
+      position: relative;
+      width: 100%;
+      height: 440px;
+      margin-bottom: 14px;
+    }
+    .chart-box-sm { height: 330px; }
+    @media (max-width: 768px) {
+      .chart-box { height: 340px; }
+      .chart-box-sm { height: 280px; }
+    }
+
+    .monthly-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+      gap: 16px;
+    }
+    @media (max-width: 600px) {
+      .monthly-grid { grid-template-columns: 1fr; }
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .badge-ok { background: var(--ok-bg); color: var(--ok-ink); }
+    .badge-low { background: var(--low-bg); color: var(--low-ink); }
+    .badge-high { background: var(--high-bg); color: var(--high-ink); }
+
+    .summary-box {
+      background: #f4f9fd;
+      border-left: 5px solid var(--primary);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-top: 12px;
+    }
+    .summary-box h3 {
+      margin: 0 0 6px;
+      font-size: 1.02rem;
+      color: var(--primary-dark);
+    }
+    .summary-box ul { margin: 6px 0 0; padding-left: 20px; }
+    .summary-box li { margin-bottom: 4px; }
+
+    .alert-banner {
+      background: #fff8eb;
+      border: 1px solid #f5cf87;
+      border-left: 5px solid #d97706;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 0.9rem;
+    }
+
+    .gdrive-panel {
+      background: #f0f6ff;
+      border: 1px solid #bfd7fe;
+      border-left: 5px solid #1a73e8;
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 12px;
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      min-width: 820px;
+    }
+    th, td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e6eef5;
+      text-align: center;
+    }
+    th {
+      background: #eef5fb;
+      color: var(--ink);
+      font-weight: 700;
+      position: sticky;
+      top: 0;
+    }
+    tr:hover td { background: #f9fcff; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+      gap: 10px;
+      align-items: end;
+      background: #f8fbfd;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+
+    .def-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+    }
+    .def-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      background: #fcfdfe;
+    }
+    .def-card h4 {
+      margin: 0 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 1rem;
+      color: var(--primary-dark);
+    }
+    .def-card p, .def-card ul {
+      margin: 0;
+      font-size: 0.88rem;
+      color: #334155;
+    }
+    .def-card ul { padding-left: 18px; margin-top: 6px; }
+    .def-card li { margin-bottom: 4px; }
+
+    .water-type-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .wt-card {
+      border-radius: 12px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+    }
+    .wt-fresh { background: #f0fdf4; border-left: 5px solid #16a34a; }
+    .wt-brackish { background: #fffbeb; border-left: 5px solid #d97706; }
+    .wt-sea { background: #eff6ff; border-left: 5px solid #2563eb; }
+
+    .hidden { display: none !important; }
+    code {
+      background: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.84rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div>
+        <h1>ระบบแสดงผลและติดตามคุณภาพน้ำ 10 จุดตรวจวัด</h1>
+        <p>ฝ่ายจัดสรรน้ำและปรับปรุงระบบชลประทาน โครงการชลประทานฉะเชิงเทรา • ข้อมูล 9–23 พ.ย. 69 (120 รายการ) • เชื่อมต่อ Google Drive</p>
+      </div>
+      <div class="tool-group">
+        <button class="btn-outline" id="btnShowLabels" title="แสดง/ซ่อนป้ายตัวเลขบนกราฟ (กดเปิดเมื่อต้องการดูตัวเลขบนจุด)">🏷️ ป้ายตัวเลข: ปิด</button>
+        <button class="btn-outline" id="btnResetData" title="คืนค่าข้อมูลเริ่มต้นจากไฟล์แนบ">↺ รีเซ็ตข้อมูลตั้งต้น</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <div class="toolbar">
+        <div class="tool-group">
+          <button class="btn-gdrive" id="btnToggleGdrive">☁️ ตั้งค่า Google Drive (ออนไลน์)</button>
+          <button class="btn-outline" id="btnSyncPull" title="ดึงข้อมูลล่าสุดจาก Google Drive">🔄 ดึงข้อมูลจาก Drive</button>
+          <button class="btn-outline" id="btnSyncPush" title="บันทึกข้อมูลทั้งหมดขึ้น Google Drive">⬆️ บันทึกขึ้น Drive</button>
+          <label class="btn btn-success" style="flex-direction: row; color: #fff; margin: 0;">
+            📥 นำเข้า Excel
+            <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" style="display:none" />
+          </label>
+          <button class="btn-primary" id="btnExportExcel">📤 ส่งออก Excel</button>
+          <button class="btn-outline" id="btnToggleEditor">✏️ จัดการข้อมูลดิบ (<span id="recordCount">0</span>)</button>
+        </div>
+        <div id="saveStatus" style="font-size:0.86rem; color: var(--ok-ink); font-weight:600;">
+          ✓ พร้อมใช้งาน (สำรองข้อมูลในเครื่องอัตโนมัติ)
+        </div>
+      </div>
+
+      <div id="gdrivePanel" class="gdrive-panel hidden">
+        <h3 style="margin:0 0 8px; font-size:1.02rem; color:#1557b0;">☁️ ตั้งค่าการบันทึกข้อมูลบน Google Drive (เปิดดูออนไลน์นอกสถานที่ได้ทุกอุปกรณ์)</h3>
+        <p style="margin:0 0 10px; font-size:0.88rem; color:#334155;">
+          ระบบจะบันทึกข้อมูลเป็นไฟล์ <code>water_quality_10_stations.json</code> ใน Google Drive ของคุณโดยอัตโนมัติผ่าน Google Apps Script
+        </p>
+        <div class="tool-group" style="margin-bottom:10px;">
+          <input type="url" id="gdriveApiUrl" placeholder="วางลิงก์ Web App URL จาก Google Apps Script ที่นี่ (เช่น https://script.google.com/macros/s/.../exec)" style="flex:1; min-width:280px;" />
+          <button class="btn-gdrive" id="btnSaveGdriveUrl">💾 บันทึกการเชื่อมต่อและซิงค์ทันที</button>
+          <button class="btn-outline" id="btnShowGasGuide">📖 ดูวิธีสร้างลิงก์ Google Drive (ทำครั้งเดียว)</button>
+        </div>
+        <div id="gasGuideBox" class="hidden" style="background:#fff; padding:12px; border-radius:8px; border:1px solid #cbd5e1; font-size:0.86rem;">
+          <strong>ขั้นตอนสร้างลิงก์เชื่อมต่อ Google Drive (ใช้เวลา 2 นาที):</strong>
+          <ol style="margin:6px 0; padding-left:20px;">
+            <li>ไปที่ <a href="https://script.google.com" target="_blank">script.google.com</a> และกด <strong>+ โครงการใหม่ (New Project)</strong></li>
+            <li>ลบโค้ดเดิมทั้งหมด แล้ววางโค้ดด้านล่างนี้ลงไปแทน จากนั้นกดปุ่ม 💾 บันทึก</li>
+            <li>กดปุ่ม <strong>ทำให้ใช้งานได้ (Deploy)</strong> &gt; <strong>การทำให้ใช้งานได้รายการใหม่ (New deployment)</strong></li>
+            <li>เลือกประเภทเป็น <strong>เว็บแอป (Web app)</strong> &gt; ตั้งค่าผู้มีสิทธิ์เข้าถึงเป็น <strong>ทุกคน (Anyone)</strong> &gt; กด <strong>ทำให้ใช้งานได้ (Deploy)</strong> และกดอนุญาตสิทธิ์เข้าถึง Google Drive</li>
+            <li>คัดลอก <strong>Web app URL</strong> มาวางในช่องด้านบนนี้ได้เลย (เมื่อเปิดไฟล์เว็บนี้บนมือถือหรือคอมพิวเตอร์เครื่องอื่น ให้นำ URL เดิมมาใส่ ข้อมูลจะตรงกันทันที)</li>
+          </ol>
+          <pre style="background:#1e293b; color:#f8fafc; padding:10px; border-radius:8px; overflow-x:auto; font-size:0.8rem;">const FILE_NAME = "water_quality_10_stations.json";
+
+function doGet(e) {
+  const files = DriveApp.getFilesByName(FILE_NAME);
+  let data = [];
+  if (files.hasNext()) {
+    const content = files.next().getBlob().getDataAsString("UTF-8");
+    data = JSON.parse(content || "[]");
+  }
+  return ContentService.createTextOutput(JSON.stringify({ status: "ok", records: data }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  const payload = JSON.parse(e.postData.contents);
+  const jsonStr = JSON.stringify(payload.records || [], null, 2);
+  const files = DriveApp.getFilesByName(FILE_NAME);
+  if (files.hasNext()) {
+    files.next().setContent(jsonStr);
+  } else {
+    DriveApp.createFile(FILE_NAME, jsonStr, MimeType.PLAIN_TEXT);
+  }
+  return ContentService.createTextOutput(JSON.stringify({ status: "saved", count: (payload.records || []).length }))
+    .setMimeType(ContentService.MimeType.JSON);
+}</pre>
+        </div>
+      </div>
+
+      <div id="alertBanner" class="alert-banner" style="margin-top:12px;"></div>
+    </section>
+
+    <section class="card hidden" id="editorSection">
+      <h2 style="margin:0 0 10px; font-size:1.15rem;">เพิ่ม / แก้ไขข้อมูลการตรวจวัดน้ำ (ทศนิยม 2 ตำแหน่ง)</h2>
+      <form id="dataForm" class="form-grid">
+        <input type="hidden" id="editId" />
+        <label>จุดตรวจวัด
+          <select id="fStation" required></select>
+        </label>
+        <label>วันที่ตรวจวัด
+          <input type="date" id="fDate" required />
+        </label>
+        <label>เวลา
+          <input type="text" id="fTime" placeholder="เช่น 09.30" />
+        </label>
+        <label>อุณหภูมิ (°C ≤ 40.00)
+          <input type="number" step="0.01" id="fTemp" value="30.00" required />
+        </label>
+        <label>pH (เกณฑ์ 6.50–8.50)
+          <input type="number" step="0.01" id="fPh" required />
+        </label>
+        <label>EC (ไม่เกิน 2000.00)
+          <input type="number" step="0.01" id="fEc" required />
+        </label>
+        <label>Sal (ไม่เกิน 1.00)
+          <input type="number" step="0.01" id="fSal" required />
+        </label>
+        <label>DO (ไม่ต่ำกว่า 2.00)
+          <input type="number" step="0.01" id="fDo" required />
+        </label>
+        <label>TDS (ไม่เกิน 1300.00)
+          <input type="number" step="0.01" id="fTds" required />
+        </label>
+        <div class="tool-group">
+          <button type="submit" class="btn-primary" id="btnSaveRow">💾 บันทึกข้อมูล</button>
+          <button type="button" class="btn-outline" id="btnCancelEdit">ล้างฟอร์ม</button>
+        </div>
+      </form>
+
+      <div class="filters" style="margin-bottom:10px;">
+        <label>กรองตามจุดตรวจวัด (ในตาราง)
+          <select id="filterTableStation">
+            <option value="ALL">ทุกจุดตรวจวัด (10 จุด)</option>
+          </select>
+        </label>
+        <label>กรองตามวันที่
+          <select id="filterTableDate">
+            <option value="ALL">ทุกวันที่</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="table-wrap" style="max-height:360px;">
+        <table>
+          <thead>
+            <tr>
+              <th>จุดตรวจวัด</th>
+              <th>วันที่</th>
+              <th>เวลา</th>
+              <th>Temp (°C)</th>
+              <th>pH</th>
+              <th>EC</th>
+              <th>Sal</th>
+              <th>DO</th>
+              <th>TDS</th>
+              <th>จัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="rawTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="daily">1. กราฟรายวัน (เปิด-ปิดได้สูงสุด 6 ค่า)</button>
+        <button class="tab-btn" data-tab="weekly">2. กราฟรายสัปดาห์ (จ.–อา.)</button>
+        <button class="tab-btn" data-tab="monthly">3. กราฟรายเดือน (แยก 1 ค่า / 1 กราฟ)</button>
+      </div>
+
+      <div class="legend-strip">
+        <div class="legend-chip"><span class="dot" style="background:var(--c-ph)"></span><strong>pH</strong>: 6.50 – 8.50</div>
+        <div class="legend-chip"><span class="dot" style="background:var(--c-ec)"></span><strong>EC</strong>: ไม่เกิน 2,000.00 (ไมโครโม/ซม.)</div>
+        <div class="legend-chip"><span class="dot" style="background:var(--c-sal)"></span><strong>Sal</strong>: ไม่เกิน 1.00 (กรัม/ลิตร)</div>
+        <div class="legend-chip"><span class="dot" style="background:var(--c-do)"></span><strong>DO</strong>: ไม่ต่ำกว่า 2.00 (มก./ลิตร)</div>
+        <div class="legend-chip"><span class="dot" style="background:var(--c-tds)"></span><strong>TDS</strong>: ไม่เกิน 1,300.00 (มก./ลิตร)</div>
+        <div class="legend-chip"><span class="dot" style="background:var(--c-temp)"></span><strong>Temp</strong>: ไม่เกิน 40.00 °C</div>
+      </div>
+
+      <div class="param-toggle-bar" id="paramToggleBar">
+        <strong style="font-size:0.9rem; margin-right:4px;">🎛️ เปิด-ปิดค่าบนกราฟ:</strong>
+        <button type="button" class="btn btn-outline param-toggle active" data-param="ph" style="border-color:var(--c-ph); color:var(--c-ph); background:#eafaf0;">● pH</button>
+        <button type="button" class="btn btn-outline param-toggle active" data-param="ec" style="border-color:var(--c-ec); color:var(--c-ec); background:#fff4eb;">● EC</button>
+        <button type="button" class="btn btn-outline param-toggle active" data-param="sal" style="border-color:var(--c-sal); color:var(--c-sal); background:#f7efe9;">● Sal</button>
+        <button type="button" class="btn btn-outline param-toggle active" data-param="do" style="border-color:var(--c-do); color:var(--c-do); background:#ebf2ff;">● DO</button>
+        <button type="button" class="btn btn-outline param-toggle active" data-param="tds" style="border-color:var(--c-tds); color:var(--c-tds); background:#fdf0f7;">● TDS</button>
+        <button type="button" class="btn btn-outline param-toggle active" data-param="temp" style="border-color:var(--c-temp); color:var(--c-temp); background:#e8f6fe;">● Temp</button>
+        <span style="margin-left:auto; display:flex; gap:6px;">
+          <button type="button" class="btn btn-outline" id="btnShowAllParams" style="padding:5px 10px; font-size:0.82rem;">เปิดทั้งหมด</button>
+        </span>
+      </div>
+
+      <div id="view-daily">
+        <div class="filters">
+          <label>เลือกวันที่ตรวจวัด (ดูย้อนหลังได้)
+            <select id="dailyDateSelect"></select>
+          </label>
+          <label>เลือกจุดตรวจวัด (ทั้งหมดหรือเฉพาะจุด)
+            <select id="dailyStationFilter">
+              <option value="ALL">แสดงครบทั้ง 10 จุด</option>
+            </select>
+          </label>
+        </div>
+        <div class="chart-box">
+          <canvas id="dailyChart"></canvas>
+        </div>
+      </div>
+
+      <div id="view-weekly" class="hidden">
+        <div class="filters">
+          <label>เลือกจุดตรวจวัด
+            <select id="weeklyStationSelect"></select>
+          </label>
+          <label>เลือกสัปดาห์ (เรียงวันจันทร์ – วันอาทิตย์)
+            <select id="weeklyWeekSelect"></select>
+          </label>
+        </div>
+        <div class="chart-box">
+          <canvas id="weeklyChart"></canvas>
+        </div>
+      </div>
+
+      <div id="view-monthly" class="hidden">
+        <div class="filters">
+          <label>เลือกเดือน / ปี
+            <select id="monthlyMonthSelect"></select>
+          </label>
+          <label>เลือกจุดตรวจวัดที่ต้องการเปรียบเทียบ
+            <select id="monthlyStationFilter">
+              <option value="ALL">เปรียบเทียบทั้ง 10 จุด</option>
+            </select>
+          </label>
+        </div>
+        <div class="monthly-grid">
+          <div class="card" style="padding:12px;">
+            <h4 style="margin:0 0 8px; color:var(--c-ph);">กราฟที่ 1: ค่าความเป็นกรด-ด่าง (pH) [เกณฑ์ 6.50–8.50]</h4>
+            <div class="chart-box chart-box-sm"><canvas id="mChartPh"></canvas></div>
+          </div>
+          <div class="card" style="padding:12px;">
+            <h4 style="margin:0 0 8px; color:var(--c-ec);">กราฟที่ 2: ค่าความนำไฟฟ้า (EC) [ไม่เกิน 2,000.00]</h4>
+            <div class="chart-box chart-box-sm"><canvas id="mChartEc"></canvas></div>
+          </div>
+          <div class="card" style="padding:12px;">
+            <h4 style="margin:0 0 8px; color:var(--c-sal);">กราฟที่ 3: ค่าความเค็ม (Sal) [ไม่เกิน 1.00]</h4>
+            <div class="chart-box chart-box-sm"><canvas id="mChartSal"></canvas></div>
+          </div>
+          <div class="card" style="padding:12px;">
+            <h4 style="margin:0 0 8px; color:var(--c-do);">กราฟที่ 4: ค่าออกซิเจนละลายน้ำ (DO) [ไม่ต่ำกว่า 2.00]</h4>
+            <div class="chart-box chart-box-sm"><canvas id="mChartDo"></canvas></div>
+          </div>
+          <div class="card" style="padding:12px;">
+            <h4 style="margin:0 0 8px; color:var(--c-tds);">กราฟที่ 5: ค่าของแข็งละลายน้ำ (TDS) [ไม่เกิน 1,300.00]</h4>
+            <div class="chart-box chart-box-sm"><canvas id="mChartTds"></canvas></div>
+          </div>
+          <div class="card" style="padding:12px;">
+            <h4 style="margin:0 0 8px; color:var(--c-temp);">กราฟที่ 6: ค่าอุณหภูมิน้ำ (Temp) [ไม่เกิน 40.00 °C]</h4>
+            <div class="chart-box chart-box-sm"><canvas id="mChartTemp"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="summary-box" id="summarySection">
+        <h3>สรุปผลการตรวจวัดและคำแนะนำสำหรับประชาชน</h3>
+        <div id="summaryContent"></div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <h3 style="margin:0 0 8px; font-size:1.05rem;">ตารางสรุปผลและสถานะเทียบเกณฑ์ (ทศนิยม 2 ตำแหน่ง)</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ลำดับ / จุดตรวจวัด</th>
+                <th>วันที่ / ช่วงข้อมูล</th>
+                <th>ประเภทน้ำ</th>
+                <th>Temp (≤40°C)</th>
+                <th>pH (6.50–8.50)</th>
+                <th>EC (≤ 2000.00)</th>
+                <th>Sal (≤ 1.00)</th>
+                <th>DO (≥ 2.00)</th>
+                <th>TDS (≤ 1300.00)</th>
+              </tr>
+            </thead>
+            <tbody id="summaryTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 12px; font-size:1.15rem;">มาตรฐานจำแนกประเภทน้ำ (น้ำจืด • น้ำกร่อย • น้ำทะเล) และความเหมาะสมในการใช้งาน</h2>
+      <div class="water-type-grid">
+        <div class="wt-card wt-fresh">
+          <h4 style="margin:0 0 6px; color:#166534;">💧 1. น้ำจืด (Freshwater)</h4>
+          <p style="margin:0; font-size:0.88rem;">
+            <strong>ค่าความเค็ม (Sal):</strong> ไม่เกิน 0.50 กรัม/ลิตร (ppt)<br>
+            <strong>ค่าความนำไฟฟ้า (EC):</strong> น้อยกว่า 1,000 ไมโครโม/ซม.<br>
+            <strong>ค่าของแข็งละลายน้ำ (TDS):</strong> น้อยกว่า 650 มก./ลิตร<br>
+            <strong>ลักษณะและการใช้ประโยชน์:</strong> เป็นน้ำตามแม่น้ำลำคลองทั่วไป เหมาะสำหรับนำมาผลิตน้ำประปา ใช้ในครัวเรือน รดน้ำพืชผักผลไม้ทุกชนิด และเลี้ยงปลาน้ำจืด
+          </p>
+        </div>
+        <div class="wt-card wt-brackish">
+          <h4 style="margin:0 0 6px; color:#9a5b00;">🌊 2. น้ำกร่อย (Brackish Water)</h4>
+          <p style="margin:0; font-size:0.88rem;">
+            <strong>ค่าความเค็ม (Sal):</strong> มากกว่า 0.50 ถึง 30.00 กรัม/ลิตร (ppt)<br>
+            <strong>ค่าความนำไฟฟ้า (EC):</strong> 1,000 – 45,000 ไมโครโม/ซม.<br>
+            <strong>ค่าของแข็งละลายน้ำ (TDS):</strong> 650 – 30,000 มก./ลิตร<br>
+            <strong>ลักษณะและการใช้ประโยชน์:</strong> มักเกิดบริเวณปากแม่น้ำหรือช่วงน้ำทะเลหนุน <strong>ไม่ควรนำมาดื่มหรือรดน้ำพืชทั่วไป</strong> แต่เหมาะสำหรับเพาะเลี้ยงสัตว์น้ำกร่อย เช่น กุ้งขาว ปลากะพงขาว ปูทะเล
+          </p>
+        </div>
+        <div class="wt-card wt-sea">
+          <h4 style="margin:0 0 6px; color:#1e40af;">⚓ 3. น้ำทะเล (Seawater)</h4>
+          <p style="margin:0; font-size:0.88rem;">
+            <strong>ค่าความเค็ม (Sal):</strong> มากกว่า 30.00 กรัม/ลิตรขึ้นไป (เฉลี่ย ~35.00 ppt)<br>
+            <strong>ค่าความนำไฟฟ้า (EC):</strong> มากกว่า 45,000 ไมโครโม/ซม.<br>
+            <strong>ค่าของแข็งละลายน้ำ (TDS):</strong> มากกว่า 30,000 มก./ลิตร<br>
+            <strong>ลักษณะและการใช้ประโยชน์:</strong> มีความเค็มสูงมาก ใช้สำหรับระบบนิเวศทางทะเล การทำนาเกลือ และการเพาะเลี้ยงสัตว์น้ำเค็มชายฝั่ง ห้ามใช้รดพืชหรืออุปโภคบริโภคโดยตรง
+          </p>
+        </div>
+      </div>
+
+      <h3 style="margin:14px 0 10px; font-size:1.05rem; color:var(--primary-dark);">เกณฑ์คุณภาพน้ำที่เหมาะสมต่อการดำรงชีวิตประจำวัน การเพาะปลูก และการเลี้ยงสัตว์</h3>
+      <div class="def-grid">
+        <div class="def-card">
+          <h4>🏡 1. การใช้ชีวิตประจำวัน (อุปโภค-บริโภค)</h4>
+          <ul>
+            <li><strong>pH:</strong> 6.50 – 8.50 (ไม่เป็นกรดกัดกร่อนท่อ หรือด่างจนระคายเคืองผิวหนัง)</li>
+            <li><strong>ความเค็ม (Sal) / TDS:</strong> ควรเป็นน้ำจืด (Sal ≤ 0.50 ก./ล. และ TDS ≤ 500–600 มก./ล. เพื่อไม่ให้มีรสกร่อยหรือเกิดตะกรันในเครื่องใช้ไฟฟ้า)</li>
+            <li><strong>ออกซิเจนละลายน้ำ (DO):</strong> ควรสูงกว่า 4.00 มก./ลิตร น้ำจะใสสะอาด ไม่มีกลิ่นเหม็นเน่า สามารถนำไปผ่านระบบกรองและฆ่าเชื้อเพื่อใช้อุปโภคบริโภคได้</li>
+          </ul>
+        </div>
+        <div class="def-card">
+          <h4>🌱 2. การเพาะปลูกและเกษตรกรรม</h4>
+          <ul>
+            <li><strong>pH:</strong> 6.00 – 8.00 (ช่วยให้รากพืชดูดซึมธาตุอาหารในดินได้ดีที่สุด)</li>
+            <li><strong>ค่าความนำไฟฟ้า (EC) และความเค็ม (Sal):</strong>
+              <br>• <em>พืชทั่วไป / ผัก / ไม้ผล:</em> EC ไม่ควรเกิน <strong>750 – 1,000</strong> ไมโครโม/ซม. (Sal ≤ 0.50)
+              <br>• <em>ข้าวและพืชทนเค็มปานกลาง:</em> EC ไม่ควรเกิน <strong>2,000</strong> ไมโครโม/ซม. (Sal ≤ 1.00) หากเกินกว่านี้ใบจะไหม้ ข้าวเมล็ดลีบ และดินเสื่อมสภาพ
+            </li>
+            <li><strong>ออกซิเจนละลายน้ำ (DO):</strong> ≥ 2.00 – 3.00 มก./ลิตร ป้องกันรากพืชเน่าเสีย</li>
+          </ul>
+        </div>
+        <div class="def-card">
+          <h4>🐟 3. การเลี้ยงสัตว์น้ำและปศุสัตว์</h4>
+          <ul>
+            <li><strong>การเพาะเลี้ยงสัตว์น้ำ (ปลา / กุ้ง):</strong>
+              <br>• <em>DO (สำคัญที่สุด):</em> ควรอยู่ที่ <strong>4.00 – 5.00 มก./ลิตรขึ้นไป</strong> (หากต่ำกว่า 2.00 ปลาจะลอยหัวขาดอากาศตาย)
+              <br>• <em>pH:</em> 6.50 – 8.50 (เหมาะสมสุด 7.50 – 8.50)
+              <br>• <em>ความเค็ม:</em> ปลาน้ำจืด ≤ 1.00 ก./ล. / สัตว์น้ำกร่อย 5.00 – 25.00 ก./ล.
+            </li>
+            <li><strong>น้ำดื่มสำหรับปศุสัตว์ (โค กระบือ สุกร ไก่):</strong> ควรมีค่า TDS ต่ำกว่า 1,000 – 1,300 มก./ลิตร (EC ≤ 2,000) และสะอาดปราศจากน้ำเน่าเสีย</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 12px; font-size:1.15rem;">นิยามของแต่ละค่าการตรวจวัด (เข้าใจง่ายสำหรับประชาชนทั่วไป)</h2>
+      <div class="def-grid">
+        <div class="def-card">
+          <h4><span class="dot" style="background:var(--c-ph)"></span>1. ค่าความเป็นกรด-ด่าง (pH)</h4>
+          <p><strong>เกณฑ์ปกติ:</strong> 6.50 – 8.50 • บอกว่าน้ำเป็นกรดหรือเป็นด่าง หากต่ำกว่า 6.50 น้ำจะค่อนข้างเป็นกรด (อาจระคายเคืองหรือกัดกร่อน) หากสูงกว่า 8.50 จะเป็นด่างมากขึ้น</p>
+        </div>
+        <div class="def-card">
+          <h4><span class="dot" style="background:var(--c-ec)"></span>2. ค่าความนำไฟฟ้า (EC)</h4>
+          <p><strong>เกณฑ์ปกติ:</strong> ไม่เกิน 2,000.00 ไมโครโม/ซม. • บอกความสามารถของน้ำในการนำกระแสไฟฟ้า ซึ่งแปรผันตามเกลือแร่และไอออนที่ละลายอยู่ หากสูงมากมักบ่งชี้ว่ามีน้ำกร่อย/น้ำเค็มปน หรือมีสารละลายสูง</p>
+        </div>
+        <div class="def-card">
+          <h4><span class="dot" style="background:var(--c-sal)"></span>3. ค่าความเค็ม (Salinity / Sal)</h4>
+          <p><strong>เกณฑ์ปกติ:</strong> ไม่เกิน 1.00 กรัม/ลิตร • บอกระดับความเค็มของน้ำ หากเกิน 1.00 กรัม/ลิตร อาจส่งผลต่อพืชผลทางการเกษตรที่ไวต่อความเค็มและการใช้น้ำอุปโภคบริโภค</p>
+        </div>
+        <div class="def-card">
+          <h4><span class="dot" style="background:var(--c-do)"></span>4. ค่าออกซิเจนละลายน้ำ (DO)</h4>
+          <p><strong>เกณฑ์ปกติ:</strong> ไม่ต่ำกว่า 2.00 มิลลิกรัม/ลิตร • คือปริมาณออกซิเจนที่ละลายอยู่ในน้ำ สัตว์น้ำและสิ่งมีชีวิตในน้ำต้องใช้หายใจ หากต่ำกว่า 2.00 มก./ลิตร แปลว่าออกซิเจนน้อย เสี่ยงต่อสัตว์น้ำและเกิดน้ำเน่าเสียได้ง่าย</p>
+        </div>
+        <div class="def-card">
+          <h4><span class="dot" style="background:var(--c-tds)"></span>5. ค่าของแข็งละลายน้ำ (TDS)</h4>
+          <p><strong>เกณฑ์ปกติ:</strong> ไม่เกิน 1,300.00 มิลลิกรัม/ลิตร • คือปริมาณแร่ธาตุ เกลือ และสารอินทรีย์/อนินทรีย์ที่ละลายปนอยู่ในน้ำ หากสูงเกินเกณฑ์น้ำอาจมีรสกร่อยหรือขุ่นมัวเมื่อระเหยแห้ง</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    if (window.ChartDataLabels) {
+      Chart.register(ChartDataLabels);
+    }
+
+    const STORAGE_KEY = "WATER_QUALITY_10_STATIONS_V2";
+    const GDRIVE_URL_KEY = "WATER_QUALITY_GDRIVE_API_URL";
+
+    const STATIONS = [
+      { order: 1, name: "1. ทรบ.คลองตาหม้อ", short: "ทรบ.คลองตาหม้อ" },
+      { order: 2, name: "2. สะพานM.7", short: "สะพานM.7" },
+      { order: 3, name: "3. คป.ฉะเชิงเทรา", short: "คป.ฉะเชิงเทรา" },
+      { order: 4, name: "4. ศาลากลางเก่า", short: "ศาลากลางเก่า" },
+      { order: 5, name: "5. เขื่อนทดน้ำ", short: "เขื่อนทดน้ำ" },
+      { order: 6, name: "6. ปากคลองท่าลาด", short: "ปากคลองท่าลาด" },
+      { order: 7, name: "7. ฝายยางกกสับ", short: "ฝายยางกกสับ" },
+      { order: 8, name: "8. ปตร.บางคา เหนือ", short: "ปตร.บางคา เหนือ" },
+      { order: 9, name: "9. ปตร.บางคา ท้าย", short: "ปตร.บางคา ท้าย" },
+      { order: 10, name: "10. สะพานบ้านเล้อ", short: "สะพานบ้านเล้อ" }
+    ];
+
+    const COLORS = {
+      ph: "#16a34a",
+      ec: "#f97316",
+      sal: "#8b4513",
+      do: "#2563eb",
+      tds: "#ec4899",
+      temp: "#0ea5e9"
+    };
+
+    const THAI_DAYS = ["วันจันทร์", "วันอังคาร", "วันพุธ", "วันพฤหัสบดี", "วันศุกร์", "วันเสาร์", "วันอาทิตย์"];
+    const THAI_MONTHS_SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const THAI_MONTHS_FULL = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+
+    const INITIAL_RECORDS = [
+      { id:"1_2026-11-09", station_order:1, date:"2026-11-09", time:"10.50", temp:31.06, ph:6.53, ec:603.00, sal:0.29, do:5.40, tds:386.00 },
+      { id:"1_2026-11-11", station_order:1, date:"2026-11-11", time:"10.06", temp:29.91, ph:6.92, ec:506.00, sal:0.24, do:1.88, tds:324.00 },
+      { id:"1_2026-11-13", station_order:1, date:"2026-11-13", time:"11.27", temp:29.85, ph:6.96, ec:2270.00, sal:1.16, do:1.82, tds:1450.00 },
+      { id:"1_2026-11-14", station_order:1, date:"2026-11-14", time:"10.09", temp:29.81, ph:6.76, ec:391.00, sal:0.19, do:1.79, tds:254.00 },
+      { id:"1_2026-11-16", station_order:1, date:"2026-11-16", time:"12.32", temp:29.96, ph:6.91, ec:3340.00, sal:1.74, do:1.10, tds:2130.00 },
+      { id:"1_2026-11-17", station_order:1, date:"2026-11-17", time:"10.17", temp:30.06, ph:6.73, ec:613.00, sal:0.29, do:1.67, tds:392.00 },
+      { id:"1_2026-11-18", station_order:1, date:"2026-11-18", time:"9.37", temp:30.25, ph:6.74, ec:347.00, sal:0.16, do:1.37, tds:226.00 },
+      { id:"1_2026-11-19", station_order:1, date:"2026-11-19", time:"9.57", temp:30.52, ph:7.17, ec:649.00, sal:0.31, do:1.59, tds:415.00 },
+      { id:"1_2026-11-20", station_order:1, date:"2026-11-20", time:"8.34", temp:29.50, ph:7.87, ec:2270.00, sal:1.16, do:2.14, tds:1460.00 },
+      { id:"1_2026-11-21", station_order:1, date:"2026-11-21", time:"9.34", temp:29.67, ph:7.84, ec:2300.00, sal:1.17, do:2.09, tds:1470.00 },
+      { id:"1_2026-11-22", station_order:1, date:"2026-11-22", time:"10.02", temp:29.18, ph:7.94, ec:5010.00, sal:2.68, do:1.86, tds:3160.00 },
+      { id:"1_2026-11-23", station_order:1, date:"2026-11-23", time:"10.19", temp:30.10, ph:7.74, ec:12900.00, sal:7.42, do:1.92, tds:8020.00 },
+      { id:"2_2026-11-09", station_order:2, date:"2026-11-09", time:"10.38", temp:30.85, ph:6.35, ec:369.00, sal:0.17, do:2.43, tds:240.00 },
+      { id:"2_2026-11-11", station_order:2, date:"2026-11-11", time:"9.54", temp:29.73, ph:6.84, ec:330.00, sal:0.16, do:3.07, tds:215.00 },
+      { id:"2_2026-11-13", station_order:2, date:"2026-11-13", time:"11.16", temp:29.53, ph:6.75, ec:329.00, sal:0.16, do:2.20, tds:214.00 },
+      { id:"2_2026-11-14", station_order:2, date:"2026-11-14", time:"9.46", temp:29.64, ph:6.76, ec:294.00, sal:0.14, do:1.52, tds:191.00 },
+      { id:"2_2026-11-16", station_order:2, date:"2026-11-16", time:"12.03", temp:29.67, ph:6.28, ec:317.00, sal:0.15, do:1.26, tds:206.00 },
+      { id:"2_2026-11-17", station_order:2, date:"2026-11-17", time:"10.01", temp:30.10, ph:6.55, ec:302.00, sal:0.14, do:0.88, tds:197.00 },
+      { id:"2_2026-11-18", station_order:2, date:"2026-11-18", time:"9.18", temp:30.06, ph:6.64, ec:305.00, sal:0.14, do:1.15, tds:198.00 },
+      { id:"2_2026-11-19", station_order:2, date:"2026-11-19", time:"9.46", temp:30.52, ph:6.98, ec:278.00, sal:0.13, do:1.33, tds:181.00 },
+      { id:"2_2026-11-20", station_order:2, date:"2026-11-20", time:"8.19", temp:30.26, ph:7.23, ec:439.00, sal:0.21, do:1.30, tds:285.00 },
+      { id:"2_2026-11-21", station_order:2, date:"2026-11-21", time:"9.19", temp:30.25, ph:7.55, ec:650.00, sal:0.31, do:1.82, tds:416.00 },
+      { id:"2_2026-11-22", station_order:2, date:"2026-11-22", time:"9.54", temp:29.57, ph:7.70, ec:4820.00, sal:2.57, do:1.91, tds:3080.00 },
+      { id:"2_2026-11-23", station_order:2, date:"2026-11-23", time:"10.06", temp:29.22, ph:7.68, ec:5690.00, sal:3.07, do:1.33, tds:3580.00 },
+      { id:"3_2026-11-09", station_order:3, date:"2026-11-09", time:"09.31", temp:31.26, ph:6.00, ec:253.00, sal:0.12, do:3.41, tds:164.00 },
+      { id:"3_2026-11-11", station_order:3, date:"2026-11-11", time:"09.02", temp:30.30, ph:6.32, ec:245.00, sal:0.11, do:1.86, tds:159.00 },
+      { id:"3_2026-11-13", station_order:3, date:"2026-11-13", time:"10.01", temp:29.50, ph:6.46, ec:256.00, sal:0.12, do:1.97, tds:167.00 },
+      { id:"3_2026-11-14", station_order:3, date:"2026-11-14", time:"09.16", temp:29.43, ph:6.38, ec:253.00, sal:0.12, do:1.90, tds:164.00 },
+      { id:"3_2026-11-16", station_order:3, date:"2026-11-16", time:"13.57", temp:30.61, ph:6.77, ec:267.00, sal:0.13, do:1.66, tds:173.00 },
+      { id:"3_2026-11-17", station_order:3, date:"2026-11-17", time:"9.26", temp:29.98, ph:7.08, ec:267.00, sal:0.13, do:1.33, tds:173.00 },
+      { id:"3_2026-11-18", station_order:3, date:"2026-11-18", time:"8.49", temp:30.26, ph:6.56, ec:268.00, sal:0.13, do:1.34, tds:174.00 },
+      { id:"3_2026-11-19", station_order:3, date:"2026-11-19", time:"9.18", temp:30.62, ph:6.77, ec:270.00, sal:0.13, do:1.29, tds:175.00 },
+      { id:"3_2026-11-20", station_order:3, date:"2026-11-20", time:"7.45", temp:30.47, ph:6.97, ec:275.00, sal:0.13, do:1.32, tds:179.00 },
+      { id:"3_2026-11-21", station_order:3, date:"2026-11-21", time:"8.48", temp:30.59, ph:7.02, ec:264.00, sal:0.12, do:1.93, tds:172.00 },
+      { id:"3_2026-11-22", station_order:3, date:"2026-11-22", time:"8.45", temp:30.64, ph:7.16, ec:272.00, sal:0.13, do:1.55, tds:177.00 },
+      { id:"3_2026-11-23", station_order:3, date:"2026-11-23", time:"9.26", temp:30.75, ph:7.01, ec:286.00, sal:0.13, do:1.51, tds:186.00 },
+      { id:"4_2026-11-09", station_order:4, date:"2026-11-09", time:"11.31", temp:30.94, ph:6.32, ec:237.00, sal:0.11, do:1.43, tds:154.00 },
+      { id:"4_2026-11-11", station_order:4, date:"2026-11-11", time:"10.5", temp:29.59, ph:7.02, ec:235.00, sal:0.11, do:2.24, tds:152.00 },
+      { id:"4_2026-11-13", station_order:4, date:"2026-11-13", time:"10.25", temp:29.38, ph:6.54, ec:224.00, sal:0.10, do:1.95, tds:146.00 },
+      { id:"4_2026-11-14", station_order:4, date:"2026-11-14", time:"11.08", temp:29.49, ph:6.59, ec:228.00, sal:0.11, do:1.73, tds:148.00 },
+      { id:"4_2026-11-16", station_order:4, date:"2026-11-16", time:"11.18", temp:29.66, ph:6.14, ec:228.00, sal:0.11, do:1.31, tds:148.00 },
+      { id:"4_2026-11-17", station_order:4, date:"2026-11-17", time:"10.57", temp:30.25, ph:6.52, ec:232.00, sal:0.11, do:1.47, tds:151.00 },
+      { id:"4_2026-11-18", station_order:4, date:"2026-11-18", time:"10.26", temp:30.44, ph:6.56, ec:237.00, sal:0.11, do:1.33, tds:154.00 },
+      { id:"4_2026-11-19", station_order:4, date:"2026-11-19", time:"10.36", temp:30.81, ph:6.95, ec:239.00, sal:0.11, do:1.52, tds:155.00 },
+      { id:"4_2026-11-20", station_order:4, date:"2026-11-20", time:"9.16", temp:30.37, ph:6.88, ec:250.00, sal:0.12, do:1.45, tds:163.00 },
+      { id:"4_2026-11-21", station_order:4, date:"2026-11-21", time:"10.13", temp:30.56, ph:7.30, ec:240.00, sal:0.11, do:1.86, tds:156.00 },
+      { id:"4_2026-11-22", station_order:4, date:"2026-11-22", time:"10.41", temp:30.72, ph:7.35, ec:249.00, sal:0.12, do:1.92, tds:162.00 },
+      { id:"4_2026-11-23", station_order:4, date:"2026-11-23", time:"11.04", temp:30.74, ph:7.77, ec:250.00, sal:0.12, do:1.64, tds:163.00 },
+      { id:"5_2026-11-09", station_order:5, date:"2026-11-09", time:"11.58", temp:31.77, ph:6.46, ec:235.00, sal:0.11, do:2.91, tds:153.00 },
+      { id:"5_2026-11-11", station_order:5, date:"2026-11-11", time:"11.11", temp:29.12, ph:6.78, ec:187.00, sal:0.09, do:2.55, tds:121.00 },
+      { id:"5_2026-11-13", station_order:5, date:"2026-11-13", time:"12.12", temp:29.07, ph:6.94, ec:447.00, sal:0.21, do:1.34, tds:291.00 },
+      { id:"5_2026-11-14", station_order:5, date:"2026-11-14", time:"11.33", temp:30.04, ph:6.59, ec:265.00, sal:0.12, do:2.22, tds:172.00 },
+      { id:"5_2026-11-16", station_order:5, date:"2026-11-16", time:"9.17", temp:29.29, ph:6.21, ec:216.00, sal:0.10, do:1.85, tds:141.00 },
+      { id:"5_2026-11-17", station_order:5, date:"2026-11-17", time:"11.22", temp:29.82, ph:6.65, ec:569.00, sal:0.27, do:1.47, tds:364.00 },
+      { id:"5_2026-11-18", station_order:5, date:"2026-11-18", time:"10.44", temp:30.44, ph:6.83, ec:483.00, sal:0.23, do:2.10, tds:314.00 },
+      { id:"5_2026-11-19", station_order:5, date:"2026-11-19", time:"10.56", temp:30.70, ph:7.17, ec:585.00, sal:0.28, do:2.33, tds:374.00 },
+      { id:"5_2026-11-20", station_order:5, date:"2026-11-20", time:"9.42", temp:30.51, ph:7.20, ec:479.00, sal:0.23, do:1.73, tds:311.00 },
+      { id:"5_2026-11-21", station_order:5, date:"2026-11-21", time:"10.31", temp:30.29, ph:7.16, ec:534.00, sal:0.26, do:2.36, tds:342.00 },
+      { id:"5_2026-11-22", station_order:5, date:"2026-11-22", time:"11.02", temp:30.43, ph:7.61, ec:503.00, sal:0.24, do:2.78, tds:322.00 },
+      { id:"5_2026-11-23", station_order:5, date:"2026-11-23", time:"11.44", temp:30.55, ph:7.29, ec:499.00, sal:0.24, do:2.23, tds:324.00 },
+      { id:"6_2026-11-09", station_order:6, date:"2026-11-09", time:"12.51", temp:29.82, ph:6.37, ec:165.00, sal:0.08, do:2.32, tds:107.00 },
+      { id:"6_2026-11-11", station_order:6, date:"2026-11-11", time:"12.21", temp:29.42, ph:6.50, ec:205.00, sal:0.10, do:3.95, tds:133.00 },
+      { id:"6_2026-11-13", station_order:6, date:"2026-11-13", time:"12.39", temp:29.19, ph:6.61, ec:226.00, sal:0.11, do:1.34, tds:147.00 },
+      { id:"6_2026-11-14", station_order:6, date:"2026-11-14", time:"12.05", temp:29.96, ph:6.53, ec:185.00, sal:0.09, do:1.84, tds:120.00 },
+      { id:"6_2026-11-16", station_order:6, date:"2026-11-16", time:"9.49", temp:29.50, ph:5.98, ec:180.00, sal:0.08, do:1.37, tds:117.00 },
+      { id:"6_2026-11-17", station_order:6, date:"2026-11-17", time:"11.49", temp:30.50, ph:6.52, ec:216.00, sal:0.10, do:1.62, tds:140.00 },
+      { id:"6_2026-11-18", station_order:6, date:"2026-11-18", time:"11.16", temp:30.47, ph:6.48, ec:195.00, sal:0.09, do:1.40, tds:90.00 },
+      { id:"6_2026-11-19", station_order:6, date:"2026-11-19", time:"11.39", temp:30.69, ph:6.84, ec:189.00, sal:0.09, do:1.53, tds:123.00 },
+      { id:"6_2026-11-20", station_order:6, date:"2026-11-20", time:"10.28", temp:30.60, ph:7.04, ec:215.00, sal:0.10, do:1.74, tds:140.00 },
+      { id:"6_2026-11-21", station_order:6, date:"2026-11-21", time:"11.02", temp:30.78, ph:6.65, ec:233.00, sal:0.11, do:1.80, tds:152.00 },
+      { id:"6_2026-11-22", station_order:6, date:"2026-11-22", time:"11.3", temp:30.47, ph:6.92, ec:248.00, sal:0.12, do:1.56, tds:161.00 },
+      { id:"6_2026-11-23", station_order:6, date:"2026-11-23", time:"12.26", temp:30.71, ph:7.07, ec:256.00, sal:0.12, do:1.77, tds:166.00 },
+      { id:"7_2026-11-09", station_order:7, date:"2026-11-09", time:"13.08", temp:29.64, ph:6.39, ec:160.00, sal:0.07, do:2.97, tds:104.00 },
+      { id:"7_2026-11-11", station_order:7, date:"2026-11-11", time:"12.33", temp:28.79, ph:6.61, ec:197.00, sal:0.09, do:2.52, tds:128.00 },
+      { id:"7_2026-11-13", station_order:7, date:"2026-11-13", time:"12.57", temp:29.07, ph:6.48, ec:260.00, sal:0.12, do:1.58, tds:169.00 },
+      { id:"7_2026-11-14", station_order:7, date:"2026-11-14", time:"12.22", temp:29.17, ph:6.40, ec:297.00, sal:0.14, do:2.25, tds:193.00 },
+      { id:"7_2026-11-16", station_order:7, date:"2026-11-16", time:"10.02", temp:29.58, ph:5.91, ec:312.00, sal:0.15, do:2.36, tds:203.00 },
+      { id:"7_2026-11-17", station_order:7, date:"2026-11-17", time:"12.01", temp:30.33, ph:6.33, ec:306.00, sal:0.14, do:2.31, tds:199.00 },
+      { id:"7_2026-11-18", station_order:7, date:"2026-11-18", time:"11.33", temp:30.46, ph:6.49, ec:295.00, sal:0.14, do:1.91, tds:192.00 },
+      { id:"7_2026-11-19", station_order:7, date:"2026-11-19", time:"11.54", temp:30.71, ph:6.77, ec:306.00, sal:0.14, do:2.19, tds:199.00 },
+      { id:"7_2026-11-20", station_order:7, date:"2026-11-20", time:"10.41", temp:30.36, ph:7.18, ec:403.00, sal:0.19, do:2.02, tds:262.00 },
+      { id:"7_2026-11-21", station_order:7, date:"2026-11-21", time:"11.15", temp:30.52, ph:6.73, ec:396.00, sal:0.19, do:1.98, tds:257.00 },
+      { id:"7_2026-11-22", station_order:7, date:"2026-11-22", time:"11.46", temp:30.42, ph:7.11, ec:454.00, sal:0.22, do:1.37, tds:295.00 },
+      { id:"7_2026-11-23", station_order:7, date:"2026-11-23", time:"12.4", temp:30.61, ph:7.15, ec:393.00, sal:0.19, do:1.77, tds:255.00 },
+      { id:"8_2026-11-09", station_order:8, date:"2026-11-09", time:"13.31", temp:29.50, ph:6.19, ec:120.00, sal:0.06, do:3.19, tds:78.00 },
+      { id:"8_2026-11-11", station_order:8, date:"2026-11-11", time:"13.03", temp:28.92, ph:6.51, ec:145.00, sal:0.07, do:2.82, tds:95.00 },
+      { id:"8_2026-11-13", station_order:8, date:"2026-11-13", time:"13.17", temp:28.69, ph:6.52, ec:228.00, sal:0.11, do:2.09, tds:148.00 },
+      { id:"8_2026-11-14", station_order:8, date:"2026-11-14", time:"12.44", temp:28.82, ph:6.64, ec:274.00, sal:0.13, do:2.85, tds:178.00 },
+      { id:"8_2026-11-16", station_order:8, date:"2026-11-16", time:"10.18", temp:29.37, ph:5.98, ec:267.00, sal:0.13, do:4.27, tds:174.00 },
+      { id:"8_2026-11-17", station_order:8, date:"2026-11-17", time:"12.25", temp:30.38, ph:6.50, ec:253.00, sal:0.12, do:2.56, tds:164.00 },
+      { id:"8_2026-11-18", station_order:8, date:"2026-11-18", time:"11.55", temp:30.39, ph:6.55, ec:249.00, sal:0.12, do:2.71, tds:162.00 },
+      { id:"8_2026-11-19", station_order:8, date:"2026-11-19", time:"12.13", temp:30.81, ph:6.87, ec:356.00, sal:0.17, do:2.46, tds:231.00 },
+      { id:"8_2026-11-20", station_order:8, date:"2026-11-20", time:"11.06", temp:30.32, ph:7.27, ec:260.00, sal:0.12, do:2.59, tds:169.00 },
+      { id:"8_2026-11-21", station_order:8, date:"2026-11-21", time:"11.41", temp:30.32, ph:6.96, ec:338.00, sal:0.16, do:2.13, tds:220.00 },
+      { id:"8_2026-11-22", station_order:8, date:"2026-11-22", time:"12.07", temp:30.59, ph:7.23, ec:354.00, sal:0.17, do:2.17, tds:230.00 },
+      { id:"8_2026-11-23", station_order:8, date:"2026-11-23", time:"13.04", temp:30.91, ph:7.20, ec:291.00, sal:0.14, do:2.13, tds:189.00 },
+      { id:"9_2026-11-09", station_order:9, date:"2026-11-09", time:"13.41", temp:29.49, ph:6.27, ec:119.00, sal:0.05, do:2.96, tds:77.00 },
+      { id:"9_2026-11-11", station_order:9, date:"2026-11-11", time:"12.53", temp:28.93, ph:6.52, ec:147.00, sal:0.07, do:2.99, tds:95.00 },
+      { id:"9_2026-11-13", station_order:9, date:"2026-11-13", time:"13.24", temp:28.85, ph:6.47, ec:251.00, sal:0.12, do:2.40, tds:163.00 },
+      { id:"9_2026-11-14", station_order:9, date:"2026-11-14", time:"12.49", temp:28.93, ph:6.63, ec:273.00, sal:0.13, do:2.36, tds:178.00 },
+      { id:"9_2026-11-16", station_order:9, date:"2026-11-16", time:"10.23", temp:29.44, ph:5.92, ec:264.00, sal:0.12, do:2.33, tds:172.00 },
+      { id:"9_2026-11-17", station_order:9, date:"2026-11-17", time:"12.3", temp:30.33, ph:6.41, ec:253.00, sal:0.12, do:2.62, tds:165.00 },
+      { id:"9_2026-11-18", station_order:9, date:"2026-11-18", time:"12.04", temp:30.42, ph:6.51, ec:244.00, sal:0.11, do:2.27, tds:159.00 },
+      { id:"9_2026-11-19", station_order:9, date:"2026-11-19", time:"12.18", temp:30.75, ph:6.87, ec:358.00, sal:0.17, do:2.48, tds:233.00 },
+      { id:"9_2026-11-20", station_order:9, date:"2026-11-20", time:"11.16", temp:30.46, ph:7.05, ec:355.00, sal:0.17, do:2.39, tds:231.00 },
+      { id:"9_2026-11-21", station_order:9, date:"2026-11-21", time:"11.48", temp:30.35, ph:6.98, ec:346.00, sal:0.16, do:1.98, tds:225.00 },
+      { id:"9_2026-11-22", station_order:9, date:"2026-11-22", time:"12.12", temp:30.66, ph:7.18, ec:375.00, sal:0.18, do:2.18, tds:244.00 },
+      { id:"9_2026-11-23", station_order:9, date:"2026-11-23", time:"13.11", temp:30.85, ph:7.18, ec:291.00, sal:0.14, do:2.12, tds:189.00 },
+      { id:"10_2026-11-09", station_order:10, date:"2026-11-09", time:"13.58", temp:29.36, ph:6.22, ec:116.00, sal:0.05, do:2.99, tds:75.00 },
+      { id:"10_2026-11-11", station_order:10, date:"2026-11-11", time:"13.26", temp:28.86, ph:6.58, ec:165.00, sal:0.08, do:2.64, tds:107.00 },
+      { id:"10_2026-11-13", station_order:10, date:"2026-11-13", time:"13.39", temp:28.64, ph:6.54, ec:193.00, sal:0.09, do:2.53, tds:125.00 },
+      { id:"10_2026-11-14", station_order:10, date:"2026-11-14", time:"13.09", temp:28.76, ph:6.65, ec:178.00, sal:0.08, do:2.79, tds:115.00 },
+      { id:"10_2026-11-16", station_order:10, date:"2026-11-16", time:"10.37", temp:29.68, ph:6.13, ec:216.00, sal:0.10, do:3.04, tds:140.00 },
+      { id:"10_2026-11-17", station_order:10, date:"2026-11-17", time:"12.46", temp:30.25, ph:6.41, ec:216.00, sal:0.10, do:2.50, tds:140.00 },
+      { id:"10_2026-11-18", station_order:10, date:"2026-11-18", time:"12.19", temp:30.28, ph:6.66, ec:232.00, sal:0.11, do:3.69, tds:151.00 },
+      { id:"10_2026-11-19", station_order:10, date:"2026-11-19", time:"12.33", temp:30.33, ph:7.00, ec:252.00, sal:0.12, do:2.38, tds:164.00 },
+      { id:"10_2026-11-20", station_order:10, date:"2026-11-20", time:"11.42", temp:30.09, ph:7.28, ec:217.00, sal:0.10, do:2.34, tds:141.00 },
+      { id:"10_2026-11-21", station_order:10, date:"2026-11-21", time:"12.04", temp:30.12, ph:6.99, ec:241.00, sal:0.11, do:2.01, tds:157.00 },
+      { id:"10_2026-11-22", station_order:10, date:"2026-11-22", time:"12.25", temp:30.26, ph:7.30, ec:244.00, sal:0.11, do:2.33, tds:159.00 },
+      { id:"10_2026-11-23", station_order:10, date:"2026-11-23", time:"13.25", temp:30.33, ph:7.31, ec:263.00, sal:0.12, do:1.95, tds:171.00 }
+    ];
+
+    let records = [];
+    let activeTab = "daily";
+    let showDataLabels = false;
+    const charts = {};
+
+    function fmt2(val) {
+      const n = Number(val);
+      return Number.isFinite(n) ? n.toFixed(2) : "-";
+    }
+
+    function formatThaiDate(iso) {
+      if (!iso) return "";
+      const [y, m, d] = iso.split("-").map(Number);
+      const beShort = String((y + 543) % 100).padStart(2, "0");
+      return `${d} ${THAI_MONTHS_SHORT[m - 1] || m} ${beShort}`;
+    }
+
+    function classifyWaterType(sal, ec) {
+      const s = Number(sal);
+      const e = Number(ec);
+      if (!Number.isFinite(s) && !Number.isFinite(e)) return `<span class="badge">-</span>`;
+      if (s > 30 || e > 45000) return `<span class="badge" style="background:#dbeafe;color:#1e40af;">น้ำทะเล</span>`;
+      if (s > 0.5 || e > 1000) return `<span class="badge badge-low">น้ำกร่อย</span>`;
+      return `<span class="badge badge-ok">น้ำจืด</span>`;
+    }
+
+    function getStatus(param, val) {
+      const v = Number(val);
+      if (!Number.isFinite(v)) return { code: "none", label: "ไม่มีข้อมูล", cls: "" };
+      if (param === "temp") {
+        if (v > 40) return { code: "high", label: `เกิน 40°C (${fmt2(v)})`, cls: "badge-high" };
+        return { code: "ok", label: `${fmt2(v)}°C`, cls: "badge-ok" };
+      }
+      if (param === "ph") {
+        if (v < 6.5) return { code: "low", label: `ต่ำกว่าเกณฑ์ (${fmt2(v)})`, cls: "badge-low" };
+        if (v > 8.5) return { code: "high", label: `สูงกว่าเกณฑ์ (${fmt2(v)})`, cls: "badge-high" };
+        return { code: "ok", label: `ปกติ (${fmt2(v)})`, cls: "badge-ok" };
+      }
+      if (param === "ec") {
+        if (v > 2000) return { code: "high", label: `สูงกว่าเกณฑ์ (${fmt2(v)})`, cls: "badge-high" };
+        return { code: "ok", label: `ปกติ (${fmt2(v)})`, cls: "badge-ok" };
+      }
+      if (param === "sal") {
+        if (v > 1.0) return { code: "high", label: `สูงกว่าเกณฑ์ (${fmt2(v)})`, cls: "badge-high" };
+        return { code: "ok", label: `ปกติ (${fmt2(v)})`, cls: "badge-ok" };
+      }
+      if (param === "do") {
+        if (v < 2.0) return { code: "low", label: `ต่ำกว่าเกณฑ์ (${fmt2(v)})`, cls: "badge-low" };
+        return { code: "ok", label: `ปกติ (${fmt2(v)})`, cls: "badge-ok" };
+      }
+      if (param === "tds") {
+        if (v > 1300) return { code: "high", label: `สูงกว่าเกณฑ์ (${fmt2(v)})`, cls: "badge-high" };
+        return { code: "ok", label: `ปกติ (${fmt2(v)})`, cls: "badge-ok" };
+      }
+      return { code: "ok", label: fmt2(v), cls: "badge-ok" };
+    }
+
+    function setSaveStatus(msg, isError = false) {
+      const el = document.getElementById("saveStatus");
+      el.textContent = msg;
+      el.style.color = isError ? "#b91c1c" : "#166534";
+    }
+
+    async function saveRecords(syncDrive = true) {
+      records.sort((a, b) => a.station_order - b.station_order || a.date.localeCompare(b.date));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+      document.getElementById("recordCount").textContent = records.length;
+
+      const apiUrl = localStorage.getItem(GDRIVE_URL_KEY) || "";
+      if (syncDrive && apiUrl) {
+        await pushToGoogleDrive(apiUrl);
+      } else {
+        setSaveStatus("✓ บันทึกในเครื่องแล้ว" + (apiUrl ? "" : " (ยังไม่เชื่อมต่อ Google Drive)"));
+      }
+    }
+
+    async function pushToGoogleDrive(apiUrl) {
+      if (!apiUrl) {
+        alert("กรุณากดปุ่ม '☁️ ตั้งค่า Google Drive' และใส่ Web App URL ก่อนครับ");
+        return;
+      }
+      setSaveStatus("⏳ กำลังบันทึกข้อมูลขึ้น Google Drive...");
+      try {
+        const res = await fetch(apiUrl, {
+          method: "POST",
+          body: JSON.stringify({ records })
+        });
+        const data = await res.json();
+        if (data.status === "saved") {
+          const now = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+          setSaveStatus(`☁️ บันทึกลง Google Drive สำเร็จ (${data.count} รายการ • เวลา ${now} น.)`);
+        } else {
+          throw new Error("Unexpected response");
+        }
+      } catch (err) {
+        console.error(err);
+        setSaveStatus("⚠️ บันทึกในเครื่องแล้ว แต่ส่งขึ้น Google Drive ไม่สำเร็จ (ตรวจสอบลิงก์/อินเทอร์เน็ต)", true);
+      }
+    }
+
+    async function pullFromGoogleDrive(apiUrl, silent = false) {
+      if (!apiUrl) {
+        if (!silent) alert("กรุณากดปุ่ม '☁️ ตั้งค่า Google Drive' และใส่ Web App URL ก่อนครับ");
+        return;
+      }
+      setSaveStatus("⏳ กำลังดึงข้อมูลล่าสุดจาก Google Drive...");
+      try {
+        const res = await fetch(apiUrl);
+        const data = await res.json();
+        if (data.status === "ok" && Array.isArray(data.records)) {
+          if (data.records.length > 0) {
+            records = data.records;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+            refreshAllUI();
+            const now = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+            setSaveStatus(`☁️ ซิงค์ข้อมูลจาก Google Drive แล้ว (${records.length} รายการ • ${now} น.)`);
+          } else {
+            setSaveStatus("☁️ เชื่อมต่อ Google Drive สำเร็จ (ยังไม่มีไฟล์เดิม ระบบใช้ข้อมูลตั้งต้น)");
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        setSaveStatus("⚠️ ดึงข้อมูลจาก Google Drive ไม่สำเร็จ (แสดงข้อมูลสำรองในเครื่อง)", true);
+      }
+    }
+
+    function loadInitialData() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          records = Array.isArray(parsed) && parsed.length > 0 ? parsed : JSON.parse(JSON.stringify(INITIAL_RECORDS));
+        } catch {
+          records = JSON.parse(JSON.stringify(INITIAL_RECORDS));
+        }
+      } else {
+        records = JSON.parse(JSON.stringify(INITIAL_RECORDS));
+      }
+      const savedUrl = localStorage.getItem(GDRIVE_URL_KEY) || "";
+      document.getElementById("gdriveApiUrl").value = savedUrl;
+      if (savedUrl) {
+        pullFromGoogleDrive(savedUrl, true);
+      }
+    }
+
+    function populateStationDropdowns() {
+      const fStation = document.getElementById("fStation");
+      const filterTableStation = document.getElementById("filterTableStation");
+      const dailyStationFilter = document.getElementById("dailyStationFilter");
+      const weeklyStationSelect = document.getElementById("weeklyStationSelect");
+      const monthlyStationFilter = document.getElementById("monthlyStationFilter");
+
+      fStation.innerHTML = "";
+      weeklyStationSelect.innerHTML = "";
+
+      STATIONS.forEach(st => {
+        fStation.add(new Option(st.name, st.order));
+        filterTableStation.add(new Option(st.name, st.order));
+        dailyStationFilter.add(new Option(st.name, st.order));
+        weeklyStationSelect.add(new Option(st.name, st.order));
+        monthlyStationFilter.add(new Option(st.name, st.order));
+      });
+    }
+
+    function getUniqueDates() {
+      return [...new Set(records.map(r => r.date))].sort();
+    }
+
+    function getMondayISO(isoDate) {
+      const [y, m, d] = isoDate.split("-").map(Number);
+      const dt = new Date(y, m - 1, d);
+      const day = dt.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      dt.setDate(dt.getDate() + diff);
+      const yy = dt.getFullYear();
+      const mm = String(dt.getMonth() + 1).padStart(2, "0");
+      const dd = String(dt.getDate()).padStart(2, "0");
+      return `${yy}-${mm}-${dd}`;
+    }
+
+    function addDaysISO(isoDate, days) {
+      const [y, m, d] = isoDate.split("-").map(Number);
+      const dt = new Date(y, m - 1, d);
+      dt.setDate(dt.getDate() + days);
+      const yy = dt.getFullYear();
+      const mm = String(dt.getMonth() + 1).padStart(2, "0");
+      const dd = String(dt.getDate()).padStart(2, "0");
+      return `${yy}-${mm}-${dd}`;
+    }
+
+    function updateFilterDropdowns() {
+      const dates = getUniqueDates();
+
+      const dailyDateSelect = document.getElementById("dailyDateSelect");
+      const prevDaily = dailyDateSelect.value;
+      dailyDateSelect.innerHTML = "";
+      dates.slice().reverse().forEach(d => {
+        dailyDateSelect.add(new Option(`${formatThaiDate(d)} (${d})`, d));
+      });
+      if (dates.includes(prevDaily)) dailyDateSelect.value = prevDaily;
+
+      const filterTableDate = document.getElementById("filterTableDate");
+      const prevTblDate = filterTableDate.value;
+      filterTableDate.innerHTML = `<option value="ALL">ทุกวันที่</option>`;
+      dates.slice().reverse().forEach(d => {
+        filterTableDate.add(new Option(formatThaiDate(d), d));
+      });
+      if (dates.includes(prevTblDate)) filterTableDate.value = prevTblDate;
+
+      const mondays = [...new Set(dates.map(getMondayISO))].sort().reverse();
+      const weeklyWeekSelect = document.getElementById("weeklyWeekSelect");
+      const prevWeek = weeklyWeekSelect.value;
+      weeklyWeekSelect.innerHTML = "";
+      mondays.forEach(mon => {
+        const sun = addDaysISO(mon, 6);
+        weeklyWeekSelect.add(new Option(`สัปดาห์ ${formatThaiDate(mon)} – ${formatThaiDate(sun)}`, mon));
+      });
+      if (mondays.includes(prevWeek)) weeklyWeekSelect.value = prevWeek;
+
+      const months = [...new Set(dates.map(d => d.slice(0, 7)))].sort().reverse();
+      const monthlyMonthSelect = document.getElementById("monthlyMonthSelect");
+      const prevMonth = monthlyMonthSelect.value;
+      monthlyMonthSelect.innerHTML = "";
+      months.forEach(ym => {
+        const [y, m] = ym.split("-").map(Number);
+        monthlyMonthSelect.add(new Option(`${THAI_MONTHS_FULL[m - 1]} ${y + 543}`, ym));
+      });
+      if (months.includes(prevMonth)) monthlyMonthSelect.value = prevMonth;
+    }
+
+    function renderAlertBanner() {
+      const dates = getUniqueDates();
+      const latestDate = dates[dates.length - 1];
+      const banner = document.getElementById("alertBanner");
+      if (!latestDate) {
+        banner.innerHTML = "ยังไม่มีข้อมูลการตรวจวัดในระบบ";
+        return;
+      }
+      const latestRecs = records.filter(r => r.date === latestDate);
+      const issues = [];
+      latestRecs.forEach(r => {
+        const st = STATIONS.find(s => s.order === r.station_order);
+        const name = st ? st.short : `จุดที่ ${r.station_order}`;
+        if (r.ph < 6.5) issues.push(`${name} (pH ต่ำ=${fmt2(r.ph)})`);
+        if (r.ph > 8.5) issues.push(`${name} (pH สูง=${fmt2(r.ph)})`);
+        if (r.ec > 2000) issues.push(`${name} (EC สูง=${fmt2(r.ec)})`);
+        if (r.sal > 1.0) issues.push(`${name} (ความเค็มสูง=${fmt2(r.sal)})`);
+        if (r.do < 2.0) issues.push(`${name} (DO ต่ำ=${fmt2(r.do)})`);
+        if (r.tds > 1300) issues.push(`${name} (TDS สูง=${fmt2(r.tds)})`);
+      });
+
+      if (issues.length === 0) {
+        banner.style.background = "#e6f6ec";
+        banner.style.borderColor = "#86efac";
+        banner.style.borderLeftColor = "#16a34a";
+        banner.innerHTML = `✅ <strong>ข้อมูลล่าสุดวันที่ ${formatThaiDate(latestDate)}:</strong> ทุกจุดตรวจวัดผ่านเกณฑ์มาตรฐานคุณภาพน้ำทั้งหมด`;
+      } else {
+        banner.style.background = "#fff8eb";
+        banner.style.borderColor = "#f5cf87";
+        banner.style.borderLeftColor = "#d97706";
+        banner.innerHTML = `⚠️ <strong>แจ้งเตือนค่าเกินเกณฑ์ล่าสุด (${formatThaiDate(latestDate)}):</strong> พบ ${issues.length} รายการที่ควรเฝ้าระวัง ได้แก่ ${issues.join(" • ")}`;
+      }
+    }
+
+    function destroyChart(key) {
+      if (charts[key]) {
+        charts[key].destroy();
+        delete charts[key];
+      }
+    }
+
+    const visibleParams = {
+      ph: true,
+      ec: true,
+      sal: true,
+      do: true,
+      tds: true,
+      temp: true
+    };
+
+    function buildMultiAxisLineChart(canvasId, chartKey, labels, datasetsData, titleText) {
+      destroyChart(chartKey);
+      const ctx = document.getElementById(canvasId).getContext("2d");
+
+      const allDatasets = [
+        {
+          key: "ph",
+          label: "pH (6.50-8.50)",
+          data: datasetsData.ph,
+          borderColor: COLORS.ph,
+          backgroundColor: COLORS.ph,
+          yAxisID: "ySmall",
+          tension: 0.25,
+          borderWidth: 2.5,
+          pointRadius: 4,
+          spanGaps: true
+        },
+        {
+          key: "sal",
+          label: "Sal (≤ 1.00)",
+          data: datasetsData.sal,
+          borderColor: COLORS.sal,
+          backgroundColor: COLORS.sal,
+          yAxisID: "ySmall",
+          tension: 0.25,
+          borderWidth: 2.5,
+          pointRadius: 4,
+          spanGaps: true
+        },
+        {
+          key: "do",
+          label: "DO (≥ 2.00)",
+          data: datasetsData.do,
+          borderColor: COLORS.do,
+          backgroundColor: COLORS.do,
+          yAxisID: "ySmall",
+          tension: 0.25,
+          borderWidth: 2.5,
+          pointRadius: 4,
+          spanGaps: true
+        },
+        {
+          key: "temp",
+          label: "Temp (≤ 40.00 °C)",
+          data: datasetsData.temp,
+          borderColor: COLORS.temp,
+          backgroundColor: COLORS.temp,
+          yAxisID: "ySmall",
+          tension: 0.25,
+          borderWidth: 2.5,
+          pointRadius: 4,
+          spanGaps: true
+        },
+        {
+          key: "ec",
+          label: "EC (≤ 2000.00)",
+          data: datasetsData.ec,
+          borderColor: COLORS.ec,
+          backgroundColor: COLORS.ec,
+          yAxisID: "yLarge",
+          tension: 0.25,
+          borderWidth: 2.5,
+          pointRadius: 4,
+          spanGaps: true
+        },
+        {
+          key: "tds",
+          label: "TDS (≤ 1300.00)",
+          data: datasetsData.tds,
+          borderColor: COLORS.tds,
+          backgroundColor: COLORS.tds,
+          yAxisID: "yLarge",
+          tension: 0.25,
+          borderWidth: 2.5,
+          pointRadius: 4,
+          spanGaps: true
+        }
+      ];
+
+      const activeDatasets = allDatasets.filter(ds => visibleParams[ds.key]);
+      const hasSmall = activeDatasets.some(ds => ds.yAxisID === "ySmall");
+      const hasLarge = activeDatasets.some(ds => ds.yAxisID === "yLarge");
+
+      charts[chartKey] = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: activeDatasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            title: { display: true, text: titleText, font: { size: 15, family: "Sarabun" } },
+            legend: {
+              onClick: (e, legendItem, legend) => {
+                const ds = legend.chart.data.datasets[legendItem.datasetIndex];
+                if (ds && ds.key && Object.prototype.hasOwnProperty.call(visibleParams, ds.key)) {
+                  toggleParamVisibility(ds.key);
+                }
+              }
+            },
+            datalabels: {
+              display: ctx => showDataLabels && ctx.dataset.data[ctx.dataIndex] !== null && ctx.dataset.data[ctx.dataIndex] !== undefined,
+              align: ctx => {
+                const key = ctx.dataset.key;
+                if (key === "do") return "bottom";
+                if (key === "sal") return "right";
+                if (key === "tds") return "bottom";
+                return "top";
+              },
+              offset: 4,
+              backgroundColor: "rgba(255,255,255,0.88)",
+              borderRadius: 4,
+              padding: { top: 1, bottom: 1, left: 3, right: 3 },
+              font: { size: 9.5, weight: "bold" },
+              formatter: v => (v !== null && v !== undefined ? Number(v).toFixed(2) : "")
+            }
+          },
+          scales: {
+            ySmall: {
+              display: hasSmall,
+              type: "linear",
+              position: "left",
+              title: { display: true, text: "ค่า pH / Sal / DO / Temp" },
+              beginAtZero: true
+            },
+            yLarge: {
+              display: hasLarge,
+              type: "linear",
+              position: "right",
+              title: { display: true, text: "ค่า EC / TDS" },
+              beginAtZero: true,
+              grid: { drawOnChartArea: !hasSmall }
+            }
+          }
+        }
+      });
+    }
+
+    function buildSingleParamChart(canvasId, chartKey, labels, values, label, color) {
+      destroyChart(chartKey);
+      const ctx = document.getElementById(canvasId).getContext("2d");
+      charts[chartKey] = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label,
+            data: values,
+            borderColor: color,
+            backgroundColor: color + "22",
+            fill: true,
+            tension: 0.25,
+            borderWidth: 2.5,
+            pointRadius: 4,
+            spanGaps: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            datalabels: {
+              display: showDataLabels,
+              align: "top",
+              color: "#1e293b",
+              font: { size: 10, weight: "bold" },
+              formatter: v => (v !== null && v !== undefined ? Number(v).toFixed(2) : "")
+            }
+          },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    function renderActiveView() {
+      const summaryContent = document.getElementById("summaryContent");
+      const summaryTableBody = document.getElementById("summaryTableBody");
+      summaryTableBody.innerHTML = "";
+
+      if (activeTab === "daily") {
+        const selDate = document.getElementById("dailyDateSelect").value;
+        const stFilter = document.getElementById("dailyStationFilter").value;
+        const targetStations = stFilter === "ALL" ? STATIONS : STATIONS.filter(s => String(s.order) === stFilter);
+
+        const labels = [];
+        const dsets = { ph: [], ec: [], sal: [], do: [], tds: [], temp: [] };
+        const rowsHtml = [];
+        const notes = [];
+
+        targetStations.forEach(st => {
+          const rec = records.find(r => r.date === selDate && r.station_order === st.order);
+          labels.push(st.name);
+          dsets.ph.push(rec ? rec.ph : null);
+          dsets.ec.push(rec ? rec.ec : null);
+          dsets.sal.push(rec ? rec.sal : null);
+          dsets.do.push(rec ? rec.do : null);
+          dsets.tds.push(rec ? rec.tds : null);
+          dsets.temp.push(rec ? (rec.temp ?? null) : null);
+
+          if (rec) {
+            const sTemp = getStatus("temp", rec.temp);
+            const sPh = getStatus("ph", rec.ph);
+            const sEc = getStatus("ec", rec.ec);
+            const sSal = getStatus("sal", rec.sal);
+            const sDo = getStatus("do", rec.do);
+            const sTds = getStatus("tds", rec.tds);
+            rowsHtml.push(`
+              <tr>
+                <td style="text-align:left;font-weight:600;">${st.name}</td>
+                <td>${formatThaiDate(rec.date)} (${rec.time || "-"})</td>
+                <td>${classifyWaterType(rec.sal, rec.ec)}</td>
+                <td><span class="badge ${sTemp.cls}">${sTemp.label}</span></td>
+                <td><span class="badge ${sPh.cls}">${sPh.label}</span></td>
+                <td><span class="badge ${sEc.cls}">${sEc.label}</span></td>
+                <td><span class="badge ${sSal.cls}">${sSal.label}</span></td>
+                <td><span class="badge ${sDo.cls}">${sDo.label}</span></td>
+                <td><span class="badge ${sTds.cls}">${sTds.label}</span></td>
+              </tr>
+            `);
+            if (sSal.code === "high" || sEc.code === "high") {
+              notes.push(`<li><strong>${st.name}:</strong> น้ำเริ่มมีสภาพเป็นน้ำกร่อย (EC=${fmt2(rec.ec)}, Sal=${fmt2(rec.sal)}) ควรหลีกเลี่ยงการสูบน้ำรดพืชผลที่ไวต่อความเค็ม</li>`);
+            }
+            if (sDo.code === "low") {
+              notes.push(`<li><strong>${st.name}:</strong> ค่าออกซิเจนละลายน้ำต่ำ (DO=${fmt2(rec.do)} มก./ลิตร) เกษตรกรผู้เลี้ยงสัตว์น้ำในกระชังควรเปิดเครื่องตีน้ำเพิ่มออกซิเจน</li>`);
+            }
+          } else {
+            rowsHtml.push(`
+              <tr>
+                <td style="text-align:left;">${st.name}</td>
+                <td>${formatThaiDate(selDate)}</td>
+                <td colspan="7" style="color:var(--muted);">ไม่มีข้อมูลตรวจวัดในวันนี้</td>
+              </tr>
+            `);
+          }
+        });
+
+        buildMultiAxisLineChart("dailyChart", "daily", labels, dsets, `คุณภาพน้ำรายวัน วันที่ ${formatThaiDate(selDate)}`);
+        summaryTableBody.innerHTML = rowsHtml.join("");
+        summaryContent.innerHTML = notes.length > 0
+          ? `<ul>${notes.join("")}</ul>`
+          : `<p style="margin:0;">คุณภาพน้ำในวันที่ ${formatThaiDate(selDate)} อยู่ในเกณฑ์ปกติ สามารถใช้ในการเกษตรและดำรงชีวิตประจำวันได้ตามปกติ</p>`;
+      }
+
+      if (activeTab === "weekly") {
+        const stOrder = Number(document.getElementById("weeklyStationSelect").value);
+        const monIso = document.getElementById("weeklyWeekSelect").value;
+        const st = STATIONS.find(s => s.order === stOrder);
+
+        const labels = [];
+        const dsets = { ph: [], ec: [], sal: [], do: [], tds: [], temp: [] };
+        const rowsHtml = [];
+
+        for (let i = 0; i < 7; i++) {
+          const dIso = addDaysISO(monIso, i);
+          const rec = records.find(r => r.station_order === stOrder && r.date === dIso);
+          labels.push(`${THAI_DAYS[i]} (${formatThaiDate(dIso)})`);
+          dsets.ph.push(rec ? rec.ph : null);
+          dsets.ec.push(rec ? rec.ec : null);
+          dsets.sal.push(rec ? rec.sal : null);
+          dsets.do.push(rec ? rec.do : null);
+          dsets.tds.push(rec ? rec.tds : null);
+          dsets.temp.push(rec ? (rec.temp ?? null) : null);
+
+          if (rec) {
+            const sTemp = getStatus("temp", rec.temp);
+            const sPh = getStatus("ph", rec.ph);
+            const sEc = getStatus("ec", rec.ec);
+            const sSal = getStatus("sal", rec.sal);
+            const sDo = getStatus("do", rec.do);
+            const sTds = getStatus("tds", rec.tds);
+            rowsHtml.push(`
+              <tr>
+                <td style="text-align:left;font-weight:600;">${THAI_DAYS[i]}</td>
+                <td>${formatThaiDate(dIso)}</td>
+                <td>${classifyWaterType(rec.sal, rec.ec)}</td>
+                <td><span class="badge ${sTemp.cls}">${sTemp.label}</span></td>
+                <td><span class="badge ${sPh.cls}">${sPh.label}</span></td>
+                <td><span class="badge ${sEc.cls}">${sEc.label}</span></td>
+                <td><span class="badge ${sSal.cls}">${sSal.label}</span></td>
+                <td><span class="badge ${sDo.cls}">${sDo.label}</span></td>
+                <td><span class="badge ${sTds.cls}">${sTds.label}</span></td>
+              </tr>
+            `);
+          }
+        }
+
+        buildMultiAxisLineChart("weeklyChart", "weekly", labels, dsets, `แนวโน้มรายสัปดาห์: ${st ? st.name : ""}`);
+        summaryTableBody.innerHTML = rowsHtml.length ? rowsHtml.join("") : `<tr><td colspan="9">ไม่มีข้อมูลในสัปดาห์นี้</td></tr>`;
+        summaryContent.innerHTML = `<p style="margin:0;">แสดงแนวโน้มการเปลี่ยนแปลงคุณภาพน้ำตลอดสัปดาห์ของ <strong>${st ? st.name : ""}</strong> เพื่อให้เห็นช่วงเวลาที่ค่าความเค็มหรือออกซิเจนเปลี่ยนแปลง (เชื่อมต่อจุดข้อมูลข้ามวันที่เว้นช่วงตรวจวัดอัตโนมัติ)</p>`;
+      }
+
+      if (activeTab === "monthly") {
+        const ym = document.getElementById("monthlyMonthSelect").value;
+        const stFilter = document.getElementById("monthlyStationFilter").value;
+        const targetStations = stFilter === "ALL" ? STATIONS : STATIONS.filter(s => String(s.order) === stFilter);
+
+        const labels = [];
+        const avg = { ph: [], ec: [], sal: [], do: [], tds: [], temp: [] };
+        const rowsHtml = [];
+
+        targetStations.forEach(st => {
+          const list = records.filter(r => r.station_order === st.order && r.date.startsWith(ym));
+          labels.push(st.short);
+          if (list.length > 0) {
+            const mTemp = list.reduce((s, r) => s + (r.temp || 30), 0) / list.length;
+            const mPh = list.reduce((s, r) => s + r.ph, 0) / list.length;
+            const mEc = list.reduce((s, r) => s + r.ec, 0) / list.length;
+            const mSal = list.reduce((s, r) => s + r.sal, 0) / list.length;
+            const mDo = list.reduce((s, r) => s + r.do, 0) / list.length;
+            const mTds = list.reduce((s, r) => s + r.tds, 0) / list.length;
+
+            avg.ph.push(Number(mPh.toFixed(2)));
+            avg.ec.push(Number(mEc.toFixed(2)));
+            avg.sal.push(Number(mSal.toFixed(2)));
+            avg.do.push(Number(mDo.toFixed(2)));
+            avg.tds.push(Number(mTds.toFixed(2)));
+            avg.temp.push(Number(mTemp.toFixed(2)));
+
+            const sTemp = getStatus("temp", mTemp);
+            const sPh = getStatus("ph", mPh);
+            const sEc = getStatus("ec", mEc);
+            const sSal = getStatus("sal", mSal);
+            const sDo = getStatus("do", mDo);
+            const sTds = getStatus("tds", mTds);
+
+            rowsHtml.push(`
+              <tr>
+                <td style="text-align:left;font-weight:600;">${st.name}</td>
+                <td>เฉลี่ย (${list.length} ครั้ง)</td>
+                <td>${classifyWaterType(mSal, mEc)}</td>
+                <td><span class="badge ${sTemp.cls}">${sTemp.label}</span></td>
+                <td><span class="badge ${sPh.cls}">${sPh.label}</span></td>
+                <td><span class="badge ${sEc.cls}">${sEc.label}</span></td>
+                <td><span class="badge ${sSal.cls}">${sSal.label}</span></td>
+                <td><span class="badge ${sDo.cls}">${sDo.label}</span></td>
+                <td><span class="badge ${sTds.cls}">${sTds.label}</span></td>
+              </tr>
+            `);
+          } else {
+            avg.ph.push(null); avg.ec.push(null); avg.sal.push(null); avg.do.push(null); avg.tds.push(null); avg.temp.push(null);
+          }
+        });
+
+        buildSingleParamChart("mChartPh", "mPh", labels, avg.ph, "ค่าเฉลี่ย pH", COLORS.ph);
+        buildSingleParamChart("mChartEc", "mEc", labels, avg.ec, "ค่าเฉลี่ย EC", COLORS.ec);
+        buildSingleParamChart("mChartSal", "mSal", labels, avg.sal, "ค่าเฉลี่ย Sal", COLORS.sal);
+        buildSingleParamChart("mChartDo", "mDo", labels, avg.do, "ค่าเฉลี่ย DO", COLORS.do);
+        buildSingleParamChart("mChartTds", "mTds", labels, avg.tds, "ค่าเฉลี่ย TDS", COLORS.tds);
+        buildSingleParamChart("mChartTemp", "mTemp", labels, avg.temp, "ค่าเฉลี่ย Temp", COLORS.temp);
+
+        summaryTableBody.innerHTML = rowsHtml.join("");
+        summaryContent.innerHTML = `<p style="margin:0;">เปรียบเทียบค่าเฉลี่ยรายเดือนของทั้ง 10 จุดตรวจวัด แยกตามแต่ละพารามิเตอร์เพื่อให้เห็นภาพรวมคุณภาพน้ำตลอดทั้งลำน้ำ</p>`;
+      }
+    }
+
+    function renderRawTable() {
+      const fSt = document.getElementById("filterTableStation").value;
+      const fDt = document.getElementById("filterTableDate").value;
+      const tbody = document.getElementById("rawTableBody");
+
+      const filtered = records.filter(r => {
+        if (fSt !== "ALL" && String(r.station_order) !== fSt) return false;
+        if (fDt !== "ALL" && r.date !== fDt) return false;
+        return true;
+      }).sort((a, b) => b.date.localeCompare(a.date) || a.station_order - b.station_order);
+
+      tbody.innerHTML = filtered.map(r => {
+        const st = STATIONS.find(s => s.order === r.station_order);
+        return `
+          <tr>
+            <td style="text-align:left;">${st ? st.name : r.station_order}</td>
+            <td>${formatThaiDate(r.date)}</td>
+            <td>${r.time || "-"}</td>
+            <td>${fmt2(r.temp)}</td>
+            <td>${fmt2(r.ph)}</td>
+            <td>${fmt2(r.ec)}</td>
+            <td>${fmt2(r.sal)}</td>
+            <td>${fmt2(r.do)}</td>
+            <td>${fmt2(r.tds)}</td>
+            <td>
+              <button class="btn-outline btn-sm" onclick="editRow('${r.id}')">แก้ไข</button>
+              <button class="btn-danger" onclick="deleteRow('${r.id}')">ลบ</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    window.editRow = function(id) {
+      const rec = records.find(r => r.id === id);
+      if (!rec) return;
+      document.getElementById("editId").value = rec.id;
+      document.getElementById("fStation").value = rec.station_order;
+      document.getElementById("fDate").value = rec.date;
+      document.getElementById("fTime").value = rec.time || "";
+      document.getElementById("fTemp").value = rec.temp ?? 30.00;
+      document.getElementById("fPh").value = rec.ph;
+      document.getElementById("fEc").value = rec.ec;
+      document.getElementById("fSal").value = rec.sal;
+      document.getElementById("fDo").value = rec.do;
+      document.getElementById("fTds").value = rec.tds;
+      document.getElementById("editorSection").classList.remove("hidden");
+      document.getElementById("editorSection").scrollIntoView({ behavior: "smooth" });
+    };
+
+    window.deleteRow = async function(id) {
+      if (!confirm("ต้องการลบข้อมูลรายการนี้ใช่หรือไม่?")) return;
+      records = records.filter(r => r.id !== id);
+      await saveRecords(true);
+      refreshAllUI();
+    };
+
+    function refreshAllUI() {
+      document.getElementById("recordCount").textContent = records.length;
+      updateFilterDropdowns();
+      renderAlertBanner();
+      renderRawTable();
+      renderActiveView();
+    }
+
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        activeTab = btn.dataset.tab;
+        ["daily", "weekly", "monthly"].forEach(v => {
+          document.getElementById(`view-${v}`).classList.toggle("hidden", v !== activeTab);
+        });
+        renderActiveView();
+      });
+    });
+
+    ["dailyDateSelect", "dailyStationFilter", "weeklyStationSelect", "weeklyWeekSelect", "monthlyMonthSelect", "monthlyStationFilter"].forEach(id => {
+      document.getElementById(id).addEventListener("change", renderActiveView);
+    });
+
+    ["filterTableStation", "filterTableDate"].forEach(id => {
+      document.getElementById(id).addEventListener("change", renderRawTable);
+    });
+
+    document.getElementById("btnToggleEditor").addEventListener("click", () => {
+      document.getElementById("editorSection").classList.toggle("hidden");
+    });
+
+    document.getElementById("btnToggleGdrive").addEventListener("click", () => {
+      document.getElementById("gdrivePanel").classList.toggle("hidden");
+    });
+
+    document.getElementById("btnShowGasGuide").addEventListener("click", () => {
+      document.getElementById("gasGuideBox").classList.toggle("hidden");
+    });
+
+    document.getElementById("btnSaveGdriveUrl").addEventListener("click", async () => {
+      const url = document.getElementById("gdriveApiUrl").value.trim();
+      if (!url) {
+        localStorage.removeItem(GDRIVE_URL_KEY);
+        setSaveStatus("ยกเลิกการเชื่อมต่อ Google Drive แล้ว");
+        return;
+      }
+      localStorage.setItem(GDRIVE_URL_KEY, url);
+      await pullFromGoogleDrive(url);
+    });
+
+    document.getElementById("btnSyncPull").addEventListener("click", () => {
+      const url = localStorage.getItem(GDRIVE_URL_KEY) || "";
+      pullFromGoogleDrive(url);
+    });
+
+    document.getElementById("btnSyncPush").addEventListener("click", () => {
+      const url = localStorage.getItem(GDRIVE_URL_KEY) || "";
+      pushToGoogleDrive(url);
+    });
+
+    function syncParamToggleUI() {
+      document.querySelectorAll(".param-toggle").forEach(btn => {
+        const param = btn.dataset.param;
+        const isOn = !!visibleParams[param];
+        btn.classList.toggle("active", isOn);
+        btn.classList.toggle("inactive", !isOn);
+      });
+      const mapCard = {
+        ph: document.getElementById("mChartPh")?.closest(".card"),
+        ec: document.getElementById("mChartEc")?.closest(".card"),
+        sal: document.getElementById("mChartSal")?.closest(".card"),
+        do: document.getElementById("mChartDo")?.closest(".card"),
+        tds: document.getElementById("mChartTds")?.closest(".card"),
+        temp: document.getElementById("mChartTemp")?.closest(".card")
+      };
+      Object.entries(mapCard).forEach(([k, card]) => {
+        if (card) card.classList.toggle("hidden", !visibleParams[k]);
+      });
+    }
+
+    function toggleParamVisibility(param) {
+      visibleParams[param] = !visibleParams[param];
+      syncParamToggleUI();
+      renderActiveView();
+    }
+
+    document.querySelectorAll(".param-toggle").forEach(btn => {
+      btn.addEventListener("click", () => {
+        toggleParamVisibility(btn.dataset.param);
+      });
+    });
+
+    document.getElementById("btnShowAllParams").addEventListener("click", () => {
+      Object.keys(visibleParams).forEach(k => { visibleParams[k] = true; });
+      syncParamToggleUI();
+      renderActiveView();
+    });
+
+    document.getElementById("btnShowLabels").addEventListener("click", (e) => {
+      showDataLabels = !showDataLabels;
+      e.target.textContent = `🏷️ ป้ายตัวเลข: ${showDataLabels ? "เปิด" : "ปิด"}`;
+      renderActiveView();
+    });
+
+    document.getElementById("btnResetData").addEventListener("click", async () => {
+      if (!confirm("ต้องการคืนค่าข้อมูลเริ่มต้นทั้ง 120 รายการจากไฟล์แนบใช่หรือไม่?")) return;
+      records = JSON.parse(JSON.stringify(INITIAL_RECORDS));
+      await saveRecords(true);
+      refreshAllUI();
+    });
+
+    document.getElementById("btnCancelEdit").addEventListener("click", () => {
+      document.getElementById("editId").value = "";
+      document.getElementById("dataForm").reset();
+    });
+
+    document.getElementById("dataForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const editId = document.getElementById("editId").value;
+      const station_order = Number(document.getElementById("fStation").value);
+      const date = document.getElementById("fDate").value;
+      const time = document.getElementById("fTime").value.trim();
+      const temp = Number(document.getElementById("fTemp").value);
+      const ph = Number(document.getElementById("fPh").value);
+      const ec = Number(document.getElementById("fEc").value);
+      const sal = Number(document.getElementById("fSal").value);
+      const doVal = Number(document.getElementById("fDo").value);
+      const tds = Number(document.getElementById("fTds").value);
+
+      const newId = `${station_order}_${date}`;
+      const rowObj = { id: newId, station_order, date, time, temp, ph, ec, sal, do: doVal, tds };
+
+      if (editId) {
+        records = records.filter(r => r.id !== editId && r.id !== newId);
+      } else {
+        records = records.filter(r => r.id !== newId);
+      }
+      records.push(rowObj);
+
+      document.getElementById("editId").value = "";
+      document.getElementById("dataForm").reset();
+      await saveRecords(true);
+      refreshAllUI();
+    });
+
+    const THAI_MONTH_LOOKUP = {
+      "ม.ค.": "01", "ม.ค": "01", "มกราคม": "01",
+      "ก.พ.": "02", "ก.พ": "02", "กุมภาพันธ์": "02",
+      "มี.ค.": "03", "มี.ค": "03", "มีนาคม": "03",
+      "เม.ย.": "04", "เม.ย": "04", "เมษายน": "04",
+      "พ.ค.": "05", "พ.ค": "05", "พฤษภาคม": "05",
+      "มิ.ย.": "06", "มิ.ย": "06", "มิถุนายน": "06",
+      "ก.ค.": "07", "ก.ค": "07", "กรกฎาคม": "07",
+      "ส.ค.": "08", "ส.ค": "08", "สิงหาคม": "08",
+      "ก.ย.": "09", "ก.ย": "09", "กันยายน": "09",
+      "ต.ค.": "10", "ต.ค": "10", "ตุลาคม": "10",
+      "พ.ย.": "11", "พ.ย": "11", "พฤศจิกายน": "11",
+      "ธ.ค.": "12", "ธ.ค": "12", "ธันวาคม": "12"
+    };
+
+    function parseExcelDate(val) {
+      if (val === undefined || val === null || val === "") return "";
+      if (typeof val === "number") {
+        const utcDays = Math.floor(val - 25569);
+        const dt = new Date(utcDays * 86400 * 1000);
+        const y = dt.getUTCFullYear();
+        const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
+        const d = String(dt.getUTCDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+      }
+      let str = String(val).trim();
+      const thaiMatch = str.match(/^(\d{1,2})\s+([^\s\d]+)\s+(\d{2,4})$/);
+      if (thaiMatch) {
+        const d = String(Number(thaiMatch[1])).padStart(2, "0");
+        const m = THAI_MONTH_LOOKUP[thaiMatch[2].trim()];
+        let y = Number(thaiMatch[3]);
+        if (y < 100) y += 2500;
+        if (y > 2400) y -= 543;
+        if (m) return `${y}-${m}-${d}`;
+      }
+      const slashMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+      if (slashMatch) {
+        const d = String(Number(slashMatch[1])).padStart(2, "0");
+        const m = String(Number(slashMatch[2])).padStart(2, "0");
+        let y = Number(slashMatch[3]);
+        if (y < 100) y += 2500;
+        if (y > 2400) y -= 543;
+        return `${y}-${m}-${d}`;
+      }
+      const isoMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+      if (isoMatch) {
+        let y = Number(isoMatch[1]);
+        if (y > 2400) y -= 543;
+        const m = String(Number(isoMatch[2])).padStart(2, "0");
+        const d = String(Number(isoMatch[3])).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+      }
+      return str;
+    }
+
+    function toCleanNumber(val, fallback = 0) {
+      if (val === undefined || val === null || String(val).trim() === "") return fallback;
+      const cleaned = String(val).replace(/,/g, "").replace(/\.{2,}/g, ".").trim();
+      const num = Number(cleaned);
+      return Number.isFinite(num) ? num : fallback;
+    }
+
+    function pickNumber(row, keys, fallback = 0) {
+      for (const k of keys) {
+        if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== "") {
+          const cleaned = String(row[k]).replace(/,/g, "").replace(/\.{2,}/g, ".").trim();
+          const num = Number(cleaned);
+          if (Number.isFinite(num)) return num;
+        }
+      }
+      return fallback;
+    }
+
+    function matchStationOrder(sheetName, col0Text) {
+      const candidates = [sheetName || "", col0Text || ""];
+      for (const txt of candidates) {
+        const clean = txt.toLowerCase().replace(/\s+/g, "");
+        if (!clean) continue;
+        if (clean.includes("คลองตาหม้อ")) return 1;
+        if (clean.includes("m.7") || clean.includes("m7") || clean.includes("มอเตอร์เวย์")) return 2;
+        if (clean.includes("คป.") || clean.includes("คปฉะเชิงเทรา") || clean.includes("โครงการชลประทานฉะเชิงเทรา")) return 3;
+        if (clean.includes("ศาลากลางเก่า")) return 4;
+        if (clean.includes("เขื่อนทดน้ำ")) return 5;
+        if (clean.includes("ปากคลองท่าลาด") || clean.includes("ท่าลาด")) return 6;
+        if (clean.includes("กกสับ") || clean.includes("ฝายยาง")) return 7;
+        if (clean.includes("บางคา") && (clean.includes("เหนือ") || clean.includes("ด้านเหนือ"))) return 8;
+        if (clean.includes("บางคา") && (clean.includes("ท้าย") || clean.includes("ด้านท้าย"))) return 9;
+        if (clean.includes("บ้านเล้อ")) return 10;
+
+        const stByList = STATIONS.find(s =>
+          clean.includes(s.short.toLowerCase().replace(/\s+/g, "")) ||
+          clean.includes(s.name.toLowerCase().replace(/\s+/g, ""))
+        );
+        if (stByList) return stByList.order;
+
+        const numMatch = txt.trim().match(/^(\d{1,2})\b/);
+        if (numMatch) {
+          const n = Number(numMatch[1]);
+          if (n >= 1 && n <= 10) return n;
+        }
+      }
+      return NaN;
+    }
+
+    function parseReportMatrixSheet(sheet, sheetName) {
+      const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      const parsedRows = [];
+      let currentStationOrder = matchStationOrder(sheetName, "");
+
+      for (let r = 0; r < matrix.length; r++) {
+        const row = matrix[r];
+        if (!Array.isArray(row) || row.length < 5) continue;
+
+        const col0 = String(row[0] ?? "").trim();
+        const detectedOrder = matchStationOrder(sheetName, col0);
+        if (!Number.isNaN(detectedOrder)) {
+          currentStationOrder = detectedOrder;
+        }
+
+        const date = parseExcelDate(row[1]);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+        if (!(currentStationOrder >= 1 && currentStationOrder <= 10)) continue;
+
+        const rawTime = row[2];
+        const timeStr = typeof rawTime === "number"
+          ? rawTime.toFixed(2)
+          : String(rawTime ?? "").trim();
+
+        const tempVal = row[3];
+        const phVal = row[4];
+        const ecVal = row[5];
+        const salVal = row[6];
+        const doVal = row[7];
+        const tdsVal = row[8];
+
+        const hasAnyMetric = [tempVal, phVal, ecVal, salVal, doVal, tdsVal].some(v => String(v ?? "").trim() !== "");
+        if (!hasAnyMetric) continue;
+
+        parsedRows.push({
+          id: `${currentStationOrder}_${date}`,
+          station_order: currentStationOrder,
+          date,
+          time: timeStr,
+          temp: toCleanNumber(tempVal, 30.00),
+          ph: toCleanNumber(phVal, 0),
+          ec: toCleanNumber(ecVal, 0),
+          sal: toCleanNumber(salVal, 0),
+          do: toCleanNumber(doVal, 0),
+          tds: toCleanNumber(tdsVal, 0)
+        });
+      }
+      return parsedRows;
+    }
+
+    document.getElementById("excelFileInput").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const wb = XLSX.read(data, { type: "array" });
+          let imported = 0;
+
+          wb.SheetNames.forEach(sheetName => {
+            const sheet = wb.Sheets[sheetName];
+            const matrixImported = parseReportMatrixSheet(sheet, sheetName);
+            if (matrixImported.length > 0) {
+              matrixImported.forEach(item => {
+                records = records.filter(r => r.id !== item.id);
+                records.push(item);
+                imported++;
+              });
+              return;
+            }
+
+            const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+            rows.forEach(row => {
+              const rawSt = row.station_order ?? row["ลำดับ"] ?? row["จุดที่"] ?? row["จุดตรวจวัด"] ?? row["station"] ?? sheetName ?? "";
+              const stOrder = matchStationOrder(sheetName, String(rawSt));
+              const rawDate = row.date ?? row["วันที่"] ?? row["วัน/เดือน/ปี"] ?? row["Date"] ?? "";
+              const date = parseExcelDate(rawDate);
+
+              if (stOrder >= 1 && stOrder <= 10 && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                const id = `${stOrder}_${date}`;
+                records = records.filter(r => r.id !== id);
+                records.push({
+                  id,
+                  station_order: stOrder,
+                  date,
+                  time: String(row.time ?? row["เวลา"] ?? "").trim(),
+                  temp: pickNumber(row, ["temp", "Temp", "Temp (°C)", "อุณหภูมิ", "อุณหภูมิ (Temp)"], 30.00),
+                  ph: pickNumber(row, ["ph", "pH", "PH"], 0),
+                  ec: pickNumber(row, ["ec", "EC"], 0),
+                  sal: pickNumber(row, ["sal", "Sal", "Salinity", "ความเค็ม"], 0),
+                  do: pickNumber(row, ["do", "DO"], 0),
+                  tds: pickNumber(row, ["tds", "TDS"], 0)
+                });
+                imported++;
+              }
+            });
+          });
+
+          e.target.value = "";
+          if (imported === 0) {
+            alert("ไม่พบข้อมูลการตรวจวัดที่ตรงรูปแบบในไฟล์ Excel กรุณาตรวจสอบชีตจุดตรวจวัด (1-10) และคอลัมน์วัน/เดือน/ปี");
+            return;
+          }
+
+          await saveRecords(true);
+          refreshAllUI();
+          alert(`นำเข้าข้อมูลสำเร็จ ${imported} รายการ จาก ${wb.SheetNames.length} ชีต`);
+        } catch (err) {
+          console.error(err);
+          e.target.value = "";
+          alert("ไม่สามารถอ่านไฟล์ Excel ได้ กรุณาตรวจสอบว่าไฟล์ไม่เสียหาย");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    document.getElementById("btnExportExcel").addEventListener("click", () => {
+      const exportRows = records.map(r => {
+        const st = STATIONS.find(s => s.order === r.station_order);
+        return {
+          station_order: r.station_order,
+          station_name: st ? st.name : "",
+          date: r.date,
+          time: r.time,
+          temp: Number((r.temp ?? 30).toFixed(2)),
+          ph: Number(r.ph.toFixed(2)),
+          ec: Number(r.ec.toFixed(2)),
+          sal: Number(r.sal.toFixed(2)),
+          do: Number(r.do.toFixed(2)),
+          tds: Number(r.tds.toFixed(2))
+        };
+      });
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "WaterQuality10Stations");
+      XLSX.writeFile(wb, `Water_Quality_10_Stations_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    });
+
+    populateStationDropdowns();
+    loadInitialData();
+    refreshAllUI();
+  </script>
+</body>
+</html>
